@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with login phone or email",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "description": "Stock item details in inventory counter",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 32 },
+        "reorderPoint": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "barcode": { "type": "string", "maxLength": 64 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "lastCountedAt": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 512 },
+        "location": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "userId", "name", "category", "quantity", "unit"]
+    },
+    "StockMovement": {
+      "title": "Stock Movement",
+      "description": "Audit and history movement log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "itemId": { "type": "string", "maxLength": 128 },
+        "itemName": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "maxLength": 32 },
+        "delta": { "type": "number" },
+        "newQuantity": { "type": "number" },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "note": { "type": "string", "maxLength": 256 }
+      },
+      "required": ["id", "userId", "itemId", "itemName", "type", "delta", "timestamp"]
+    },
+    "SaleRecord": {
+      "title": "Sale Record",
+      "description": "Completed quick sale transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "totalAmount": { "type": "number" },
+        "totalUnits": { "type": "number" },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "items": { "type": "array" }
+      },
+      "required": ["id", "userId", "totalAmount", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile"
+    },
+    "/inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Inventory items owned by user"
+    },
+    "/movements/{movementId}": {
+      "schema": { "$ref": "#/entities/StockMovement" },
+      "description": "Stock movements"
+    },
+    "/sales/{saleId}": {
+      "schema": { "$ref": "#/entities/SaleRecord" },
+      "description": "Sales records"
+    }
+  }
+}
