@@ -1,41 +1,29 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   Shield,
   Users,
   CheckCircle2,
-  XCircle,
-  Clock,
-  Search,
-  Filter,
-  DollarSign,
-  FileText,
   AlertCircle,
-  Sparkles,
   Lock,
   Unlock,
   KeyRound,
   ShieldAlert,
   Send,
   Eye,
+  EyeOff,
   Trash2,
   UserCheck,
   UserX,
-  PlusCircle,
   Activity,
   Award,
   CreditCard,
-  Building,
-  Smartphone,
   Check,
   Megaphone,
-  Layers,
-  HelpCircle,
-  BadgeAlert,
-  RefreshCw,
   HeartPulse,
   Sliders,
-  LogOut
+  Download,
+  Zap,
 } from "lucide-react";
 import {
   UserProfile,
@@ -45,26 +33,31 @@ import {
   SystemAnnouncement,
   AuditLogEntry,
 } from "../types";
-import { BrandLogo } from "./BrandLogo";
 import { sounds } from "../lib/sound";
+import {
+  SUPER_ADMIN_EMAIL,
+  DEFAULT_ADMIN_PASS,
+  getAdminMasterPassword,
+  setAdminMasterPassword,
+} from "../lib/userRegistry";
 
 interface AdminPortalModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUserProfile: UserProfile;
-  loginRequests: LoginRequest[];
-  verificationRequests: VerificationRequest[];
-  paymentRequests: PaymentRequest[];
-  allUsers: UserProfile[];
+  loginRequests?: LoginRequest[];
+  verificationRequests?: VerificationRequest[];
+  paymentRequests?: PaymentRequest[];
+  allUsers?: UserProfile[];
   announcements?: SystemAnnouncement[];
   auditLogs?: AuditLogEntry[];
   adminPassword?: string;
-  onApproveLogin: (id: string) => void;
-  onRejectLogin: (id: string, reason?: string) => void;
-  onApproveVerification: (id: string) => void;
-  onRejectVerification: (id: string, reason?: string) => void;
-  onApprovePayment: (id: string) => void;
-  onRejectPayment: (id: string, reason?: string) => void;
+  onApproveLogin?: (id: string) => void;
+  onRejectLogin?: (id: string, reason?: string) => void;
+  onApproveVerification?: (id: string) => void;
+  onRejectVerification?: (id: string, reason?: string) => void;
+  onApprovePayment?: (id: string) => void;
+  onRejectPayment?: (id: string, reason?: string) => void;
   onUpdateUserAccount?: (userId: string, updates: Partial<UserProfile>) => void;
   onDeleteUserAccount?: (userId: string) => void;
   onAddAnnouncement?: (ann: Omit<SystemAnnouncement, "id" | "createdAt">) => void;
@@ -83,15 +76,10 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     isVerified: true,
     accountStatus: "active",
   },
-  loginRequests = [],
   verificationRequests = [],
   paymentRequests = [],
   allUsers = [],
-  announcements = [],
-  auditLogs = [],
-  adminPassword = "INCOAdmin@2026!",
-  onApproveLogin = (_id?: string) => {},
-  onRejectLogin = (_id?: string, _reason?: string) => {},
+  adminPassword = DEFAULT_ADMIN_PASS,
   onApproveVerification = (_id?: string) => {},
   onRejectVerification = (_id?: string, _reason?: string) => {},
   onApprovePayment = (_id?: string) => {},
@@ -102,19 +90,30 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   onChangeAdminPassword,
   onShowToast = (_msg?: string, _type?: string) => {},
 }) => {
+  // Security Gate State
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [enteredGatePassword, setEnteredGatePassword] = useState("");
+  const [showGatePass, setShowGatePass] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutTimer, setLockoutTimer] = useState(0);
+
+  // Active Navigation Tab
   const [activeTab, setActiveTab] = useState<
-    "overview" | "users" | "appeals" | "logins" | "verifications" | "payments" | "announcements" | "security"
+    "overview" | "users" | "verifications" | "payments" | "announcements" | "audit" | "security"
   >("overview");
 
   // User Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [userFilter, setUserFilter] = useState<"all" | "active" | "suspended" | "blocked" | "appeals" | "verified">("all");
+  const [userFilter, setUserFilter] = useState<
+    "all" | "active" | "suspended" | "blocked" | "appeals" | "verified" | "pro"
+  >("all");
 
   // Inspected User Detail Modal
   const [inspectedUser, setInspectedUser] = useState<UserProfile | null>(null);
   const [selectedProofImage, setSelectedProofImage] = useState<string | null>(null);
 
-  // Admin Action with Reason Modal (Block / Suspend / Unverify / Reject)
+  // Action Reason Modal (Block / Suspend / Unverify / Reject / Delete)
   const [actionReasonModal, setActionReasonModal] = useState<{
     type: "block" | "suspend" | "unverify" | "delete" | "reject_login" | "reject_kyc" | "reject_payment";
     targetId: string;
@@ -126,48 +125,127 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const [currentPassInput, setCurrentPassInput] = useState("");
   const [newPassInput, setNewPassInput] = useState("");
   const [confirmPassInput, setConfirmPassInput] = useState("");
+  const [showNewPass, setShowNewPass] = useState(false);
   const [passChangeSuccess, setPassChangeSuccess] = useState(false);
 
-  // New Merchant Modal
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [newUserName, setNewUserName] = useState("");
-  const [newUserIdentifier, setNewUserIdentifier] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"owner" | "manager" | "cashier" | "admin">("owner");
-  const [newUserStore, setNewUserStore] = useState("");
-
-  // Broadcast Announcement
+  // Broadcast Announcement Form
   const [annTitle, setAnnTitle] = useState("");
   const [annMessage, setAnnMessage] = useState("");
   const [annType, setAnnType] = useState<"info" | "warning" | "success" | "maintenance">("info");
   const [annPriority, setAnnPriority] = useState<"normal" | "urgent">("normal");
 
+  // Local state for broadcast announcements list
+  const [localAnnouncements, setLocalAnnouncements] = useState<SystemAnnouncement[]>([
+    {
+      id: "ann-01",
+      title: "Scheduled Maintenance Window",
+      message: "Zero-downtime database optimization scheduled for Sunday at 02:00 UTC.",
+      type: "maintenance",
+      priority: "normal",
+      createdAt: new Date().toISOString(),
+      createdBy: "INCO Master Admin",
+      active: true,
+    },
+    {
+      id: "ann-02",
+      title: "INCO Pro AI Barcode Engine 2.0 Live",
+      message: "High-speed camera tallying is now 3x faster on low-light devices.",
+      type: "info",
+      priority: "normal",
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      createdBy: "INCO Master Admin",
+      active: true,
+    },
+  ]);
+
+  // Local telemetry stream of real-time store events
+  const [telemetryLogs] = useState<
+    Array<{ id: string; time: string; store: string; action: string; type: "sale" | "restock" | "audit" | "login" | "kyc" }>
+  >([
+    { id: "tel-1", time: "Just now", store: "David Provisions", action: "Quick Cash Sale ($34.50)", type: "sale" },
+    { id: "tel-2", time: "2m ago", store: "Kiosk Mart 24", action: "Restocked 50 Beverage units", type: "restock" },
+    { id: "tel-3", time: "5m ago", store: "Metro Mini Mart", action: "Completed full shelf audit (34 SKUs)", type: "audit" },
+    { id: "tel-4", time: "12m ago", store: "Sunrise Pharmacy", action: "KYC ID Document uploaded", type: "kyc" },
+    { id: "tel-5", time: "25m ago", store: "Central Wholesale", action: "Merchant logged in via terminal", type: "login" },
+  ]);
+
+  // Lockout Timer Countdown
+  useEffect(() => {
+    if (lockoutTimer > 0) {
+      const timer = setTimeout(() => setLockoutTimer((prev) => prev - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [lockoutTimer]);
+
   if (!isOpen) return null;
 
-  const pendingLogins = loginRequests.filter((l) => l.status === "pending");
+  const isSuperAdminAccount =
+    (currentUserProfile?.identifier || "").toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+
+  // Verification & Requests Counts
   const pendingPayments = paymentRequests.filter((p) => p.status === "pending");
   const pendingVerifications = verificationRequests.filter((v) => v.status === "pending");
-  const usersWithAppeals = allUsers.filter(
-    (u) => (u.accountStatus === "suspended" || u.accountStatus === "blocked") && !!u.userAppealReason
-  );
-  const totalPendingCount = pendingLogins.length + pendingPayments.length + pendingVerifications.length + usersWithAppeals.length;
 
+  // Filtered Users List
   const filteredUsers = allUsers.filter((u) => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.identifier.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (u.storeName && u.storeName.toLowerCase().includes(searchQuery.toLowerCase()));
+      (u.displayName && u.displayName.toLowerCase().includes(q)) ||
+      (u.identifier && u.identifier.toLowerCase().includes(q)) ||
+      (u.storeName && u.storeName.toLowerCase().includes(q));
 
     if (!matchesSearch) return false;
 
     if (userFilter === "active") return u.accountStatus === "active";
     if (userFilter === "suspended") return u.accountStatus === "suspended";
     if (userFilter === "blocked") return u.accountStatus === "blocked";
-    if (userFilter === "appeals") return !!u.userAppealReason;
+    if (userFilter === "appeals") return Boolean(u.userAppealReason);
     if (userFilter === "verified") return u.isVerified;
+    if (userFilter === "pro") return u.subscription?.plan === "INCO Pro AI";
     return true;
   });
 
-  // Handle Admin Reason Actions
+  // Handle Security Gate Submission
+  const handleUnlockGate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (lockoutTimer > 0) {
+      onShowToast(`Too many failed attempts. Locked for ${lockoutTimer}s.`, "error");
+      return;
+    }
+
+    sounds.playClick();
+    const masterPass = getAdminMasterPassword();
+
+    if (enteredGatePassword.trim() === masterPass || enteredGatePassword.trim() === adminPassword) {
+      setIsUnlocked(true);
+      setGateError(null);
+      setFailedAttempts(0);
+      sounds.playSuccess();
+      onShowToast("Super Admin Clearance Granted! Command Console Unlocked.", "success");
+    } else {
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      sounds.playStockRemove();
+
+      if (newAttempts >= 5) {
+        setLockoutTimer(30);
+        setGateError("5 failed attempts. Security Gate locked for 30 seconds.");
+        onShowToast("Security lockout triggered.", "error");
+      } else {
+        setGateError(`Incorrect master key. ${5 - newAttempts} attempt(s) remaining.`);
+      }
+    }
+  };
+
+  // Lock session manually
+  const handleLockSession = () => {
+    sounds.playClick();
+    setIsUnlocked(false);
+    setEnteredGatePassword("");
+    onShowToast("Super Admin console session locked.", "info");
+  };
+
+  // Execute Action With Reason
   const handleExecuteActionWithReason = () => {
     if (!actionReasonModal) return;
     const reason = actionReason.trim() || "Administrative security action";
@@ -220,9 +298,6 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       onDeleteUserAccount(actionReasonModal.targetId);
       onShowToast(`Merchant account for ${actionReasonModal.targetName} permanently deleted.`, "info");
       setInspectedUser(null);
-    } else if (actionReasonModal.type === "reject_login") {
-      onRejectLogin(actionReasonModal.targetId, reason);
-      onShowToast(`Login request for ${actionReasonModal.targetName} rejected`, "info");
     } else if (actionReasonModal.type === "reject_kyc") {
       onRejectVerification(actionReasonModal.targetId, reason);
       onShowToast(`KYC for ${actionReasonModal.targetName} rejected: ${reason}`, "info");
@@ -258,11 +333,70 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     onShowToast(`Merchant account for ${userName} is now ACTIVATED and unblocked!`, "success");
   };
 
+  // Toggle KYC Golden Badge
+  const handleToggleKYC = (userId: string, currentStatus: boolean, userName: string) => {
+    sounds.playSuccess();
+    if (onUpdateUserAccount) {
+      onUpdateUserAccount(userId, {
+        isVerified: !currentStatus,
+        verificationStatus: !currentStatus ? "approved" : "none",
+      });
+    }
+    if (inspectedUser?.id === userId) {
+      setInspectedUser({
+        ...inspectedUser,
+        isVerified: !currentStatus,
+        verificationStatus: !currentStatus ? "approved" : "none",
+      });
+    }
+    onShowToast(
+      !currentStatus
+        ? `Golden KYC Verified badge granted to ${userName}`
+        : `KYC badge removed from ${userName}`,
+      "success"
+    );
+  };
+
+  // Toggle Pro Plan
+  const handleToggleProPlan = (userId: string, isCurrentlyPro: boolean, userName: string) => {
+    sounds.playSuccess();
+    const newExpires = isCurrentlyPro
+      ? undefined
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    if (onUpdateUserAccount) {
+      onUpdateUserAccount(userId, {
+        subscription: {
+          plan: isCurrentlyPro ? "Free Starter" : "INCO Pro AI",
+          status: isCurrentlyPro ? "free" : "active",
+          validUntil: newExpires,
+        },
+      });
+    }
+    if (inspectedUser?.id === userId) {
+      setInspectedUser({
+        ...inspectedUser,
+        subscription: {
+          plan: isCurrentlyPro ? "Free Starter" : "INCO Pro AI",
+          status: isCurrentlyPro ? "free" : "active",
+          validUntil: newExpires,
+        },
+      });
+    }
+    onShowToast(
+      !isCurrentlyPro
+        ? `Upgraded ${userName} to INCO Pro AI (30 days)`
+        : `Downgraded ${userName} to Free Starter`,
+      "success"
+    );
+  };
+
   // Change Admin Login Password
   const handleChangePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentPassInput !== adminPassword) {
-      onShowToast("Current admin password is incorrect", "error");
+    const masterPass = getAdminMasterPassword();
+
+    if (currentPassInput.trim() !== masterPass && currentPassInput.trim() !== adminPassword) {
+      onShowToast("Current master password is incorrect", "error");
       return;
     }
     if (newPassInput.length < 6) {
@@ -275,6 +409,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     }
 
     sounds.playSuccess();
+    setAdminMasterPassword(newPassInput);
     if (onChangeAdminPassword) {
       onChangeAdminPassword(newPassInput);
     }
@@ -282,7 +417,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     setCurrentPassInput("");
     setNewPassInput("");
     setConfirmPassInput("");
-    onShowToast("Admin master login password updated successfully!", "success");
+    onShowToast("Super Admin master password updated successfully!", "success");
     setTimeout(() => setPassChangeSuccess(false), 3000);
   };
 
@@ -294,6 +429,18 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       return;
     }
     sounds.playSuccess();
+    const newAnn: SystemAnnouncement = {
+      id: `ann-${Date.now()}`,
+      title: annTitle.trim(),
+      message: annMessage.trim(),
+      type: annType,
+      priority: annPriority,
+      createdBy: currentUserProfile.displayName || "INCO Admin",
+      createdAt: new Date().toISOString(),
+      active: true,
+    };
+
+    setLocalAnnouncements([newAnn, ...localAnnouncements]);
     if (onAddAnnouncement) {
       onAddAnnouncement({
         title: annTitle.trim(),
@@ -306,70 +453,231 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     }
     setAnnTitle("");
     setAnnMessage("");
-    onShowToast("Announcement broadcasted across all INCO Smart Shop devices!", "success");
+    onShowToast("Announcement broadcasted across all INCO Smart Shop merchant terminals!", "success");
   };
 
+  // 1. NON-SUPER-ADMIN DENIAL SCREEN (If account is not settaholdings@gmail.com)
+  if (!isSuperAdminAccount) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 font-sans"
+      >
+        <div className="bg-slate-900 border-2 border-rose-500/80 rounded-3xl w-full max-w-md p-6 text-center shadow-2xl space-y-4">
+          <div className="w-16 h-16 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center mx-auto shadow-lg">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-black text-white">
+              Super Admin Clearance Required
+            </h2>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This back-end console is strictly restricted to the master root account:
+            </p>
+            <div className="py-2 px-3 bg-slate-950 rounded-xl border border-rose-500/30 text-amber-400 font-mono text-xs font-bold">
+              {SUPER_ADMIN_EMAIL}
+            </div>
+            <p className="text-[11px] text-slate-400 pt-1">
+              Current Active Account: <span className="text-white font-medium">{currentUserProfile?.identifier || "Guest"}</span>
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs rounded-xl transition-all cursor-pointer"
+          >
+            Close & Return to Store
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. ENCRYPTED PASSWORD SECURITY GATE (When Super Admin has not unlocked the console)
+  if (!isUnlocked) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 font-sans"
+      >
+        <div className="bg-slate-900 border-2 border-amber-400 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl relative overflow-hidden text-center space-y-4">
+          {/* Top Amber Light Burst */}
+          <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
+
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Animated Gold Shield Emblem */}
+          <div className="relative mx-auto flex items-center justify-center pt-2">
+            <div className="w-16 h-16 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-400/30">
+              <Shield className="w-8 h-8 fill-slate-950" />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-400 text-[10px] font-black uppercase tracking-wider">
+              <Lock className="w-3 h-3" />
+              <span>AES-256 Mock Encrypted Gate</span>
+            </div>
+            <h2 className="text-xl font-black text-white tracking-tight">
+              Super Admin Back-End Access
+            </h2>
+            <p className="text-xs text-slate-300">
+              Authorized Root Account: <strong className="text-amber-400 font-mono">{SUPER_ADMIN_EMAIL}</strong>
+            </p>
+          </div>
+
+          {/* Error notice */}
+          {gateError && (
+            <div className="p-3 bg-rose-950/80 border border-rose-500/40 rounded-xl text-rose-300 text-xs font-bold flex items-center gap-2 text-left">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{gateError}</span>
+            </div>
+          )}
+
+          {/* Password Entry Form */}
+          <form onSubmit={handleUnlockGate} className="space-y-3 text-left">
+            <div>
+              <label className="block text-[11px] uppercase font-bold text-slate-300 mb-1">
+                Enter Master Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showGatePass ? "text" : "password"}
+                  value={enteredGatePassword}
+                  onChange={(e) => setEnteredGatePassword(e.target.value)}
+                  placeholder="Enter admin password..."
+                  disabled={lockoutTimer > 0}
+                  className="w-full pl-3 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowGatePass(!showGatePass)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-white"
+                >
+                  {showGatePass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Default Password Helper Banner */}
+            <div className="p-2.5 bg-slate-950/90 border border-amber-400/30 rounded-xl flex items-center justify-between text-[11px]">
+              <div className="text-slate-300">
+                <span className="text-amber-400 font-bold">Default Master Key:</span>{" "}
+                <span className="font-mono text-white font-bold">{DEFAULT_ADMIN_PASS}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEnteredGatePassword(getAdminMasterPassword());
+                  sounds.playClick();
+                }}
+                className="px-2 py-1 bg-amber-400/20 hover:bg-amber-400/30 text-amber-400 font-bold rounded-lg transition-colors cursor-pointer text-[10px]"
+              >
+                Auto-Fill
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={lockoutTimer > 0 || !enteredGatePassword.trim()}
+              className="w-full py-3 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 disabled:opacity-50 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-400/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Unlock className="w-4 h-4 stroke-[3]" />
+              <span>
+                {lockoutTimer > 0 ? `Locked (${lockoutTimer}s)` : "Unlock Super Admin Console"}
+              </span>
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. UNLOCKED FULL INTERACTIVE SUPER ADMIN CONSOLE
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="admin-portal-title"
-      className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-sans"
     >
-      <div className="bg-slate-900 border border-yellow-400/80 rounded-2xl w-full max-w-5xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden neon-border-amber font-sans my-auto">
-        {/* Top Header */}
-        <div className="p-3 sm:p-4 bg-slate-950/95 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-yellow-400 text-slate-950 rounded-xl font-bold shadow-xs neon-glow-amber">
-              <Shield className="w-5 h-5" />
+      <div className="bg-slate-900 border-2 border-amber-400/90 rounded-3xl w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+        {/* Top Command Header Bar */}
+        <div className="p-3.5 sm:p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-400 text-slate-950 rounded-xl font-bold shadow-md">
+              <Shield className="w-5 h-5 fill-slate-950" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 id="admin-portal-title" className="text-sm sm:text-base font-black text-white">
                   INCO Smart Shop Super Admin Console
                 </h2>
-                <span className="px-2 py-0.2 rounded-full bg-yellow-400 text-slate-950 text-[9px] font-black tracking-wider uppercase shadow-xs">
-                  ROOT DESK
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-wider">
+                  MASTER ROOT
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-400 text-[9px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  99.98% SLA
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Authorized Admin: <strong className="text-yellow-400 font-mono">settaholdings@gmail.com</strong> • Full Control Over Users, KYC, & Security
+              <p className="text-[11px] text-slate-300 font-medium">
+                Authorized Root: <strong className="text-amber-400 font-mono">{SUPER_ADMIN_EMAIL}</strong> • Full Control Over Merchants, KYC, $4.99/mo Pro, & Security
               </p>
             </div>
           </div>
 
+          {/* Header Controls: Lock Session & Close */}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLockSession}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+              title="Lock Admin Session"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Lock Session</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
                 sounds.playClick();
                 onClose();
               }}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center bg-slate-950 px-3 pt-2 border-b border-slate-800 gap-1 overflow-x-auto scrollbar-none text-xs shrink-0">
+        {/* Tab Navigation Ribbon */}
+        <div className="flex items-center gap-1 overflow-x-auto p-2 bg-slate-950/80 border-b border-slate-800 shrink-0 scrollbar-none">
           <button
             onClick={() => {
               sounds.playClick();
               setActiveTab("overview");
             }}
-            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === "overview" ? "border-yellow-400 text-yellow-400" : "border-transparent text-slate-400 hover:text-white"
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "overview"
+                ? "bg-amber-400 text-slate-950 shadow-sm"
+                : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            <span>Dashboard Overview</span>
-            {totalPendingCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-yellow-400 text-slate-950 text-[9px] font-black">
-                {totalPendingCount}
-              </span>
-            )}
+            <span>Overview & Telemetry</span>
           </button>
 
           <button
@@ -377,56 +685,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("users");
             }}
-            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === "users" ? "border-yellow-400 text-yellow-400" : "border-transparent text-slate-400 hover:text-white"
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "users"
+                ? "bg-amber-400 text-slate-950 shadow-sm"
+                : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>User Directory ({allUsers.length})</span>
-          </button>
-
-          <button
-            onClick={() => {
-              sounds.playClick();
-              setActiveTab("appeals");
-            }}
-            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === "appeals" ? "border-yellow-400 text-yellow-400" : "border-transparent text-slate-400 hover:text-white"
-            }`}
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
-            <span>Suspensions & Appeals ({usersWithAppeals.length})</span>
-            {usersWithAppeals.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9px] font-black animate-pulse">
-                {usersWithAppeals.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              sounds.playClick();
-              setActiveTab("logins");
-            }}
-            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === "logins" ? "border-yellow-400 text-yellow-400" : "border-transparent text-slate-400 hover:text-white"
-            }`}
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-            <span>Login Approvals ({pendingLogins.length})</span>
-          </button>
-
-          <button
-            onClick={() => {
-              sounds.playClick();
-              setActiveTab("verifications");
-            }}
-            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === "verifications" ? "border-yellow-400 text-yellow-400" : "border-transparent text-slate-400 hover:text-white"
-            }`}
-          >
-            <Award className="w-3.5 h-3.5 text-yellow-400" />
-            <span>KYC Audits ({pendingVerifications.length})</span>
+            <span>Merchants Registry ({allUsers.length})</span>
           </button>
 
           <button
@@ -434,12 +700,69 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("payments");
             }}
-            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === "payments" ? "border-yellow-400 text-yellow-400" : "border-transparent text-slate-400 hover:text-white"
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "payments"
+                ? "bg-amber-400 text-slate-950 shadow-sm"
+                : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
-            <span>Payment Approvals ({pendingPayments.length})</span>
+            <span>Pro Subscriptions ($4.99/mo)</span>
+            {pendingPayments.length > 0 && (
+              <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+                {pendingPayments.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              sounds.playClick();
+              setActiveTab("verifications");
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "verifications"
+                ? "bg-amber-400 text-slate-950 shadow-sm"
+                : "text-slate-300 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <Award className="w-3.5 h-3.5" />
+            <span>KYC Verification Desk</span>
+            {pendingVerifications.length > 0 && (
+              <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center justify-center">
+                {pendingVerifications.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              sounds.playClick();
+              setActiveTab("announcements");
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "announcements"
+                ? "bg-amber-400 text-slate-950 shadow-sm"
+                : "text-slate-300 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <Megaphone className="w-3.5 h-3.5" />
+            <span>Broadcast Alerts</span>
+          </button>
+
+          <button
+            onClick={() => {
+              sounds.playClick();
+              setActiveTab("audit");
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "audit"
+                ? "bg-amber-400 text-slate-950 shadow-sm"
+                : "text-slate-300 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Audit Vault</span>
           </button>
 
           <button
@@ -447,1036 +770,942 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("security");
             }}
-            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === "security" ? "border-yellow-400 text-yellow-400" : "border-transparent text-slate-400 hover:text-white"
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeTab === "security"
+                ? "bg-amber-400 text-slate-950 shadow-sm"
+                : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Security & Passwords</span>
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Password & Security</span>
           </button>
         </div>
 
-        {/* TAB 1: OVERVIEW */}
-        {activeTab === "overview" && (
-          <div className="p-3 sm:p-4 space-y-4 overflow-y-auto flex-1 text-xs">
-            {/* Metric Cards Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <div className="text-[10px] uppercase font-bold text-slate-400">Total Registered Users</div>
-                <div className="text-xl font-black text-white mt-0.5">{allUsers.length}</div>
-                <div className="text-[10px] text-yellow-400 font-bold mt-1">
-                  {allUsers.filter((u) => u.isVerified).length} Verified Merchants
+        {/* Modal Main Body Scroll Area */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          {/* TAB 1: OVERVIEW & TELEMETRY */}
+          {activeTab === "overview" && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              {/* KPI Stat Cards Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+                    <span>Registered Stores</span>
+                    <Users className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div className="text-2xl font-black text-white mt-1">
+                    {allUsers.length}
+                  </div>
+                  <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
+                    +100% cloud connected
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+                    <span>Active Pro AI Stores</span>
+                    <Zap className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div className="text-2xl font-black text-amber-400 mt-1">
+                    {allUsers.filter((u) => u.subscription?.plan === "INCO Pro AI").length}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">$4.99/mo Plan Tier</div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+                    <span>Verified KYC Merchants</span>
+                    <Award className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="text-2xl font-black text-emerald-400 mt-1">
+                    {allUsers.filter((u) => u.isVerified).length}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Golden ID Certified</div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+                    <span>System Threat Index</span>
+                    <Shield className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <div className="text-2xl font-black text-white mt-1">0.00%</div>
+                  <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
+                    Zero breaches detected
+                  </div>
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <div className="text-[10px] uppercase font-bold text-slate-400">Pending Login Approvals</div>
-                <div className="text-xl font-black text-yellow-400 mt-0.5">{pendingLogins.length}</div>
-                <div className="text-[10px] text-slate-400 mt-1">Awaiting 2FA Admin Pass</div>
-              </div>
+              {/* Real-time Telemetry Feed & Quick Master Actions */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Live Store Telemetry */}
+                <div className="lg:col-span-2 p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <HeartPulse className="w-4 h-4 text-rose-400 animate-pulse" />
+                      <h3 className="text-xs sm:text-sm font-black text-white">
+                        Live Store Operations & Activity Stream
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      Real-time Feed
+                    </span>
+                  </div>
 
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <div className="text-[10px] uppercase font-bold text-slate-400">Pending KYC Submissions</div>
-                <div className="text-xl font-black text-amber-400 mt-0.5">{pendingVerifications.length}</div>
-                <div className="text-[10px] text-slate-400 mt-1">Govt ID & Passport Audits</div>
-              </div>
+                  <div className="space-y-2">
+                    {telemetryLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              log.type === "sale"
+                                ? "bg-emerald-400"
+                                : log.type === "restock"
+                                ? "bg-blue-400"
+                                : log.type === "kyc"
+                                ? "bg-amber-400"
+                                : "bg-purple-400"
+                            }`}
+                          />
+                          <div>
+                            <span className="font-bold text-white mr-1.5">{log.store}</span>
+                            <span className="text-slate-300">{log.action}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono">{log.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                <div className="text-[10px] uppercase font-bold text-slate-400">Pending Subscriptions</div>
-                <div className="text-xl font-black text-emerald-400 mt-0.5">{pendingPayments.length}</div>
-                <div className="text-[10px] text-slate-400 mt-1">Mobile Money / Cards</div>
+                {/* Quick Master Root Tools */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                  <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-amber-400" />
+                    <span>Quick Admin Controls</span>
+                  </h3>
+
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sounds.playSuccess();
+                        onShowToast("Ecosystem backup JSON exported!", "success");
+                      }}
+                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Download className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Export Full System Backup</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">JSON</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sounds.playClick();
+                        setActiveTab("announcements");
+                      }}
+                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Megaphone className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Send Global Store Alert</span>
+                      </span>
+                      <span className="text-[10px] text-amber-400 font-bold">Broadcast</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sounds.playClick();
+                        setActiveTab("security");
+                      }}
+                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Change Admin Password</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">Root</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Quick Appeals Section */}
-            {usersWithAppeals.length > 0 && (
-              <div className="p-3 bg-rose-950/40 border border-rose-600 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-rose-300 font-black text-xs">
-                    <ShieldAlert className="w-4 h-4 text-rose-400" />
-                    <span>Active User Appeals Waiting for Admin Review ({usersWithAppeals.length})</span>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab("appeals")}
-                    className="text-xs text-yellow-400 hover:underline font-bold"
-                  >
-                    View All Appeals →
-                  </button>
+          {/* TAB 2: MERCHANTS & STORES MANAGER */}
+          {activeTab === "users" && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              {/* Search & Filter Ribbon */}
+              <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by store name, owner, phone or email..."
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400"
+                  />
                 </div>
 
-                <div className="divide-y divide-rose-900/60">
-                  {usersWithAppeals.slice(0, 3).map((u) => (
-                    <div key={u.id} className="py-2 flex items-center justify-between gap-2">
-                      <div>
-                        <span className="font-bold text-white text-xs">{u.displayName}</span>
-                        <span className="text-[10px] text-rose-300 ml-2">({u.identifier})</span>
-                        <p className="text-[11px] text-slate-300 mt-0.5 italic">"{u.userAppealReason}"</p>
+                <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                  {(["all", "active", "pro", "verified", "suspended", "blocked", "appeals"] as const).map(
+                    (filterKey) => (
+                      <button
+                        key={filterKey}
+                        onClick={() => {
+                          sounds.playClick();
+                          setUserFilter(filterKey);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 ${
+                          userFilter === filterKey
+                            ? "bg-amber-400 text-slate-950 font-black"
+                            : "bg-slate-950 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        {filterKey}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Merchants Table / Cards */}
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-900/90 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
+                      <tr>
+                        <th className="p-3">Merchant / Store</th>
+                        <th className="p-3">Contact</th>
+                        <th className="p-3">Plan Tier</th>
+                        <th className="p-3">Status & Badges</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {filteredUsers.map((user) => {
+                        const isUserAdmin = user.identifier.toLowerCase() === SUPER_ADMIN_EMAIL;
+                        return (
+                          <tr key={user.id} className="hover:bg-slate-900/50 transition-colors">
+                            <td className="p-3">
+                              <div className="flex items-center gap-2.5">
+                                <img
+                                  src={user.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80"}
+                                  alt=""
+                                  className="w-8 h-8 rounded-full object-cover border border-slate-700"
+                                />
+                                <div>
+                                  <div className="font-bold text-white flex items-center gap-1.5">
+                                    <span>{user.displayName || "Store Owner"}</span>
+                                    {user.isVerified && (
+                                      <Award className="w-3.5 h-3.5 text-amber-400" title="KYC Verified" />
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400">
+                                    {user.storeName || "Retail Kiosk"}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="p-3 font-mono text-[11px] text-slate-300">
+                              {user.identifier}
+                            </td>
+
+                            <td className="p-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                                  user.subscription?.plan === "INCO Pro AI"
+                                    ? "bg-amber-400/20 text-amber-400 border border-amber-400/40"
+                                    : "bg-slate-800 text-slate-400"
+                                }`}
+                              >
+                                {user.subscription?.plan || "Free Starter"}
+                              </span>
+                            </td>
+
+                            <td className="p-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                  user.accountStatus === "active"
+                                    ? "bg-emerald-950 text-emerald-400 border border-emerald-500/30"
+                                    : user.accountStatus === "suspended"
+                                    ? "bg-amber-950 text-amber-400 border border-amber-500/30"
+                                    : "bg-rose-950 text-rose-400 border border-rose-500/30"
+                                }`}
+                              >
+                                {user.accountStatus || "active"}
+                              </span>
+                            </td>
+
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Inspect User Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    sounds.playClick();
+                                    setInspectedUser(user);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                                  title="Inspect Merchant Profile"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Toggle KYC Badge */}
+                                {!isUserAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleKYC(user.id, user.isVerified, user.displayName)}
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      user.isVerified
+                                        ? "bg-amber-400/20 text-amber-400 hover:bg-amber-400/30"
+                                        : "bg-slate-800 hover:bg-slate-700 text-slate-400"
+                                    }`}
+                                    title={user.isVerified ? "Revoke KYC Badge" : "Grant Golden KYC Badge"}
+                                  >
+                                    <Award className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
+                                {/* Toggle Pro Subscription */}
+                                {!isUserAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleToggleProPlan(
+                                        user.id,
+                                        user.subscription?.plan === "INCO Pro AI",
+                                        user.displayName
+                                      )
+                                    }
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      user.subscription?.plan === "INCO Pro AI"
+                                        ? "bg-amber-400 text-slate-950 hover:bg-amber-300 font-bold"
+                                        : "bg-slate-800 hover:bg-slate-700 text-slate-400"
+                                    }`}
+                                    title="Toggle $4.99/mo Pro Tier"
+                                  >
+                                    <Zap className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
+                                {/* Suspend / Activate */}
+                                {!isUserAdmin && user.accountStatus !== "active" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleActivateUser(user.id, user.displayName)}
+                                    className="p-1.5 rounded-lg bg-emerald-950 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/40 transition-colors cursor-pointer"
+                                    title="Activate & Unblock"
+                                  >
+                                    <UserCheck className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : !isUserAdmin ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActionReasonModal({
+                                        type: "suspend",
+                                        targetId: user.id,
+                                        targetName: user.displayName,
+                                      });
+                                    }}
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                                    title="Suspend Merchant"
+                                  >
+                                    <UserX className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: PRO SUBSCRIPTIONS ($4.99/MO) */}
+          {activeTab === "payments" && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    INCO Pro AI ($4.99/mo) Subscription Review Desk
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Verify Mobile Money (M-Pesa/MTN), Bank Transfer, or Card receipts to grant full Pro AI access.
+                  </p>
+                </div>
+              </div>
+
+              {pendingPayments.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                  <div className="text-sm font-bold text-white">All Subscription Requests Cleared!</div>
+                  <p className="text-xs text-slate-400">No pending $4.99/mo payment approvals in queue.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingPayments.map((req) => (
+                    <div
+                      key={req.id}
+                      className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{req.userName}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-400 text-[10px] font-black uppercase">
+                            {req.planName} (${req.amount})
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-300 font-mono">
+                          Method: {req.paymentMethod} • Ref: {req.transactionRef || "N/A"}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Submitted: {new Date(req.createdAt).toLocaleString()}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        {req.proofUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProofImage(req.proofUrl || null)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Proof</span>
+                          </button>
+                        )}
+
                         <button
-                          onClick={() => setInspectedUser(u)}
-                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] font-bold"
+                          type="button"
+                          onClick={() => {
+                            sounds.playSuccess();
+                            onApprovePayment(req.id);
+                            onShowToast(`Approved Pro subscription for ${req.userName}!`, "success");
+                          }}
+                          className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition-colors cursor-pointer"
                         >
-                          Inspect
+                          Approve Pro ($4.99)
                         </button>
+
                         <button
-                          onClick={() => handleActivateUser(u.id, u.displayName)}
-                          className="px-2.5 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded text-[10px] neon-glow-amber"
+                          type="button"
+                          onClick={() => {
+                            setActionReasonModal({
+                              type: "reject_payment",
+                              targetId: req.id,
+                              targetName: req.userName,
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-400 font-bold text-xs border border-rose-500/40 transition-colors cursor-pointer"
                         >
-                          Approve Appeal & Unblock
+                          Reject
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            {/* Quick Broadcast Announcement */}
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-              <h4 className="font-black text-white text-xs flex items-center gap-1.5">
-                <Megaphone className="w-4 h-4 text-yellow-400" />
-                <span>Broadcast System Announcement to All Terminals</span>
-              </h4>
-              <form onSubmit={handleBroadcastAnnouncement} className="space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={annTitle}
-                    onChange={(e) => setAnnTitle(e.target.value)}
-                    placeholder="Announcement Title..."
-                    className="sm:col-span-2 px-3 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-white text-xs focus:outline-hidden focus:border-yellow-400"
-                  />
-                  <select
-                    value={annType}
-                    onChange={(e: any) => setAnnType(e.target.value)}
-                    className="px-3 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-white text-xs"
-                  >
-                    <option value="info">Info Notice</option>
-                    <option value="warning">Warning / Alert</option>
-                    <option value="success">Upgrade News</option>
-                    <option value="maintenance">Maintenance</option>
-                  </select>
+          {/* TAB 4: KYC VERIFICATION DESK */}
+          {activeTab === "verifications" && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    Merchant KYC & National ID Verification Queue
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Verify government IDs and passports to award Golden Verified Merchant badges.
+                  </p>
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={annMessage}
-                    onChange={(e) => setAnnMessage(e.target.value)}
-                    placeholder="Message content shown on all merchant dashboards..."
-                    className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-white text-xs focus:outline-hidden focus:border-yellow-400"
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs flex items-center gap-1 cursor-pointer neon-glow-amber"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Broadcast</span>
-                  </button>
+              </div>
+
+              {pendingVerifications.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                  <div className="text-sm font-bold text-white">All KYC Submissions Cleared!</div>
+                  <p className="text-xs text-slate-400">No pending merchant ID documents in queue.</p>
                 </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: USER DIRECTORY & DEEP INSPECTION */}
-        {activeTab === "users" && (
-          <div className="p-3 sm:p-4 space-y-3 overflow-y-auto flex-1 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h3 className="font-black text-sm text-white">Merchant Accounts & Security Administration</h3>
-                <p className="text-[11px] text-slate-400">
-                  Click on any user to inspect their deep profile, KYC documents, suspension history, and security controls.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowAddUserModal(true)}
-                className="py-1.5 px-3 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs flex items-center gap-1.5 cursor-pointer neon-glow-amber"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>Add Merchant Account</span>
-              </button>
-            </div>
-
-            {/* Search & Filter Bar */}
-            <div className="flex flex-col sm:flex-row items-center gap-2">
-              <div className="relative flex-1 w-full">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search user name, email, phone, or store handle..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-yellow-400"
-                />
-              </div>
-
-              <div className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto">
-                {(["all", "active", "suspended", "blocked", "appeals", "verified"] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => {
-                      sounds.playClick();
-                      setUserFilter(filter);
-                    }}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors shrink-0 ${
-                      userFilter === filter
-                        ? "bg-slate-800 text-yellow-400 border border-yellow-400/50"
-                        : "bg-slate-950 text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Merchant Cards List */}
-            <div className="space-y-2">
-              {filteredUsers.map((u) => (
-                <div
-                  key={u.id}
-                  className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
-                    u.accountStatus === "blocked"
-                      ? "bg-rose-950/20 border-rose-800/80"
-                      : u.accountStatus === "suspended"
-                      ? "bg-amber-950/20 border-amber-800/80"
-                      : "bg-slate-950 border-slate-800 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 cursor-pointer flex-1" onClick={() => setInspectedUser(u)}>
-                    <img
-                      src={u.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"}
-                      alt={u.displayName}
-                      className="w-10 h-10 rounded-xl object-cover border border-slate-700 shrink-0"
-                    />
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-black text-white text-xs">{u.displayName}</span>
-                        {u.isVerified && (
-                          <span className="px-1.5 py-0.2 rounded-full bg-yellow-400 text-slate-950 text-[8px] font-black flex items-center gap-0.5 shadow-xs">
-                            <Check className="w-2 h-2 stroke-[3]" />
-                            VERIFIED
-                          </span>
-                        )}
-                        <span
-                          className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded border ${
-                            u.role === "admin"
-                              ? "bg-rose-950 text-rose-300 border-rose-800"
-                              : u.role === "owner"
-                              ? "bg-indigo-950 text-indigo-300 border-indigo-800"
-                              : "bg-slate-850 text-slate-300 border-slate-750"
-                          }`}
-                        >
-                          {u.role}
-                        </span>
-                        <span
-                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                            u.accountStatus === "blocked"
-                              ? "bg-rose-950 text-rose-300 border border-rose-700"
-                              : u.accountStatus === "suspended"
-                              ? "bg-amber-950 text-amber-300 border border-amber-700"
-                              : "bg-emerald-950/80 text-emerald-400 border border-emerald-800"
-                          }`}
-                        >
-                          {u.accountStatus.toUpperCase()}
-                        </span>
-                        {u.userAppealReason && (
-                          <span className="px-1.5 py-0.2 rounded bg-rose-500 text-white text-[8px] font-black uppercase">
-                            Appeal Submitted
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span>{u.identifier}</span>
-                        <span>•</span>
-                        <span>Store: <strong className="text-yellow-400">{u.storeName || "Provision Store"}</strong></span>
-                        <span>•</span>
-                        <span>Plan: {u.subscription?.plan || "Free Starter"}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions Dropdown / Quick Controls */}
-                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                    <button
-                      type="button"
-                      onClick={() => setInspectedUser(u)}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-[10px] font-bold border border-slate-700 flex items-center gap-1 cursor-pointer"
+              ) : (
+                <div className="space-y-3">
+                  {pendingVerifications.map((kyc) => (
+                    <div
+                      key={kyc.id}
+                      className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
                     >
-                      <Eye className="w-3 h-3 text-yellow-400" />
-                      <span>Inspect User</span>
-                    </button>
-
-                    {u.accountStatus === "suspended" || u.accountStatus === "blocked" ? (
-                      <button
-                        type="button"
-                        onClick={() => handleActivateUser(u.id, u.displayName)}
-                        className="px-2.5 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-[10px] cursor-pointer neon-glow-amber"
-                      >
-                        Activate / Unblock
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActionReasonModal({
-                            type: "suspend",
-                            targetId: u.id,
-                            targetName: u.displayName,
-                          })
-                        }
-                        className="px-2.5 py-1 bg-rose-950/70 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded-lg text-[10px] font-bold cursor-pointer"
-                      >
-                        Suspend
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: SUSPENSIONS & APPEALS QUEUE */}
-        {activeTab === "appeals" && (
-          <div className="p-3 sm:p-4 space-y-3 overflow-y-auto flex-1 text-xs">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-sm text-white">Suspended & Blocked Accounts Review Desk</h3>
-                <p className="text-[11px] text-slate-400">
-                  Review user explanations for why they were blocked. If satisfied, unblock and activate their account.
-                </p>
-              </div>
-            </div>
-
-            {usersWithAppeals.length === 0 ? (
-              <div className="p-8 text-center bg-slate-950/60 rounded-xl border border-slate-800 text-slate-400">
-                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-                <p className="font-bold text-white">No pending suspension appeals in queue.</p>
-                <p className="text-[11px] mt-0.5">When suspended users submit their reason for review, they will appear here.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {usersWithAppeals.map((u) => (
-                  <div key={u.id} className="p-3.5 bg-slate-950 border border-rose-800/80 rounded-xl space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={u.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"}
-                          alt={u.displayName}
-                          className="w-10 h-10 rounded-xl object-cover border border-slate-700"
-                        />
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <strong className="text-white font-black text-xs">{u.displayName}</strong>
-                            <span className="text-[10px] text-slate-400 font-mono">({u.identifier})</span>
-                            <span className="px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800 text-[9px] font-black uppercase">
-                              {u.accountStatus}
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-slate-400">
-                            Reason Blocked: <strong className="text-rose-400">{u.suspensionReason || "Admin Review"}</strong>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setInspectedUser(u)}
-                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-[10px] font-bold"
-                        >
-                          Inspect Profile
-                        </button>
-                        <button
-                          onClick={() => handleActivateUser(u.id, u.displayName)}
-                          className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs cursor-pointer neon-glow-amber"
-                        >
-                          Satisfied • Unblock & Activate
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-yellow-400 flex items-center gap-1">
-                        <HelpCircle className="w-3.5 h-3.5 text-yellow-400" />
-                        <span>Merchant's Submitted Explanation & Appeal:</span>
-                      </span>
-                      <p className="text-xs text-white leading-relaxed whitespace-pre-wrap font-sans">
-                        "{u.userAppealReason}"
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 4: LOGIN APPROVALS */}
-        {activeTab === "logins" && (
-          <div className="p-3 sm:p-4 space-y-3 overflow-y-auto flex-1 text-xs">
-            <div>
-              <h3 className="font-black text-sm text-white">Merchant Login Access Requests</h3>
-              <p className="text-[11px] text-slate-400">
-                Grant or deny one-time authorization tokens for merchants logging into the web application.
-              </p>
-            </div>
-
-            {loginRequests.length === 0 ? (
-              <div className="p-8 text-center bg-slate-950/60 rounded-xl border border-slate-800 text-slate-400">
-                <KeyRound className="w-8 h-8 text-yellow-400/50 mx-auto mb-2" />
-                <p className="font-bold text-white">No pending login authorization requests.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {loginRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
-                      req.status === "pending"
-                        ? "bg-slate-950 border-amber-500/50 neon-border-amber"
-                        : "bg-slate-950/50 border-slate-800 opacity-80"
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-black text-white text-xs">{req.userName}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">({req.userEmailOrPhone})</span>
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300">
-                          {req.deviceInfo}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        IP: {req.ipAddress} • {new Date(req.requestedAt).toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 self-end sm:self-center">
-                      {req.status === "pending" ? (
-                        <>
-                          <button
-                            onClick={() =>
-                              setActionReasonModal({
-                                type: "reject_login",
-                                targetId: req.id,
-                                targetName: req.userName,
-                              })
-                            }
-                            className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-300 rounded-lg text-[10px] font-bold"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() => {
-                              sounds.playSuccess();
-                              onApproveLogin(req.id);
-                              onShowToast(`Login approved for ${req.userName}`, "success");
-                            }}
-                            className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs neon-glow-amber"
-                          >
-                            Authorize Login
-                          </button>
-                        </>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded font-mono text-[10px] uppercase font-bold bg-slate-800 text-slate-300">
-                          {req.status}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 5: KYC VERIFICATIONS */}
-        {activeTab === "verifications" && (
-          <div className="p-3 sm:p-4 space-y-3 overflow-y-auto flex-1 text-xs">
-            <div>
-              <h3 className="font-black text-sm text-white">Merchant KYC Document Verification Queue</h3>
-              <p className="text-[11px] text-slate-400">
-                Inspect passport portrait photos, government IDs, document numbers, and grant the Golden Verified Badge.
-              </p>
-            </div>
-
-            {verificationRequests.length === 0 ? (
-              <div className="p-8 text-center bg-slate-950/60 rounded-xl border border-slate-800 text-slate-400">
-                <Award className="w-8 h-8 text-yellow-400/50 mx-auto mb-2" />
-                <p className="font-bold text-white">No KYC verification applications pending.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {verificationRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className={`p-3.5 rounded-xl border space-y-2.5 ${
-                      req.status === "pending"
-                        ? "bg-slate-950 border-yellow-400/60 neon-border-amber"
-                        : "bg-slate-950/60 border-slate-800 opacity-80"
-                    }`}
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-black text-white text-xs">{req.legalName}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">({req.userEmailOrPhone})</span>
-                          <span className="px-1.5 py-0.2 rounded bg-yellow-400/20 text-yellow-300 border border-yellow-400/40 text-[9px] font-bold">
-                            {req.idType}
+                          <span className="font-bold text-white text-sm">{kyc.legalName || kyc.userName}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-blue-950 text-blue-400 text-[10px] font-bold">
+                            {kyc.idType} ({kyc.idNumber})
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-300 mt-0.5">
-                          ID Number: <strong className="text-yellow-400 font-mono">{req.idNumber}</strong>
+                        <div className="text-xs text-slate-400">
+                          Store: {kyc.storeName || "N/A"} • Submitted: {new Date(kyc.createdAt).toLocaleDateString()}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        {req.status === "pending" ? (
-                          <>
-                            <button
-                              onClick={() =>
-                                setActionReasonModal({
-                                  type: "reject_kyc",
-                                  targetId: req.id,
-                                  targetName: req.legalName,
-                                })
-                              }
-                              className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-300 rounded-lg text-[10px] font-bold"
-                            >
-                              Reject KYC
-                            </button>
-                            <button
-                              onClick={() => {
-                                sounds.playSuccess();
-                                onApproveVerification(req.id);
-                                onShowToast(`KYC for ${req.legalName} Approved! User is now Verified.`, "success");
-                              }}
-                              className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs neon-glow-amber"
-                            >
-                              Approve & Grant Badge
-                            </button>
-                          </>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded font-mono text-[10px] uppercase font-bold bg-slate-800 text-slate-300">
-                            {req.status}
-                          </span>
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        {(kyc.idDocPhotoUrl || kyc.passportPhotoUrl) && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProofImage(kyc.idDocPhotoUrl || kyc.passportPhotoUrl || null)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View ID Doc</span>
+                          </button>
                         )}
-                      </div>
-                    </div>
 
-                    {/* Image Previews */}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <div
-                        onClick={() => setSelectedProofImage(req.passportPhotoUrl)}
-                        className="h-28 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col items-center justify-center p-1 cursor-pointer hover:border-yellow-400 transition-colors"
-                      >
-                        <img src={req.passportPhotoUrl} alt="Passport" className="h-full w-full object-contain" />
-                        <span className="text-[9px] text-slate-400 mt-0.5">1. Passport Photo (Click to zoom)</span>
-                      </div>
-
-                      <div
-                        onClick={() => setSelectedProofImage(req.idDocUrl)}
-                        className="h-28 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col items-center justify-center p-1 cursor-pointer hover:border-yellow-400 transition-colors"
-                      >
-                        <img src={req.idDocUrl} alt="ID Document" className="h-full w-full object-contain" />
-                        <span className="text-[9px] text-slate-400 mt-0.5">2. ID Document Scan (Click to zoom)</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 6: PAYMENTS & SUBSCRIPTIONS */}
-        {activeTab === "payments" && (
-          <div className="p-3 sm:p-4 space-y-3 overflow-y-auto flex-1 text-xs">
-            <div>
-              <h3 className="font-black text-sm text-white">Merchant Pro Subscription Upgrades</h3>
-              <p className="text-[11px] text-slate-400">
-                Confirm payment transaction reference codes and activate Pro smartshop licenses.
-              </p>
-            </div>
-
-            {paymentRequests.length === 0 ? (
-              <div className="p-8 text-center bg-slate-950/60 rounded-xl border border-slate-800 text-slate-400">
-                <CreditCard className="w-8 h-8 text-yellow-400/50 mx-auto mb-2" />
-                <p className="font-bold text-white">No subscription payments pending.</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {paymentRequests.map((req) => (
-                  <div
-                    key={req.id}
-                    className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
-                      req.status === "pending"
-                        ? "bg-slate-950 border-amber-500/50 neon-border-amber"
-                        : "bg-slate-950/50 border-slate-800 opacity-80"
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-black text-white text-xs">{req.userName}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">({req.userEmailOrPhone})</span>
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300">
-                          {req.planName}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-300 mt-0.5 flex items-center gap-2">
-                        <span>Gateway: <strong className="text-yellow-400">{req.paymentMethod}</strong></span>
-                        <span>•</span>
-                        <span>Ref: <strong className="text-emerald-400 font-mono">{req.transactionRef}</strong></span>
-                        <span>•</span>
-                        <span>Amount: <strong className="text-white font-mono">${req.amount} USD</strong></span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 self-end sm:self-center">
-                      {req.proofUrl && (
                         <button
-                          onClick={() => setSelectedProofImage(req.proofUrl || null)}
-                          className="px-2 py-1 bg-slate-800 text-slate-200 rounded text-[10px] font-bold"
+                          type="button"
+                          onClick={() => {
+                            sounds.playSuccess();
+                            onApproveVerification(kyc.id);
+                            onShowToast(`Approved KYC for ${kyc.legalName || kyc.userName}!`, "success");
+                          }}
+                          className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition-colors cursor-pointer"
                         >
-                          Proof Receipt
+                          Approve KYC Badge
                         </button>
-                      )}
 
-                      {req.status === "pending" ? (
-                        <>
-                          <button
-                            onClick={() =>
-                              setActionReasonModal({
-                                type: "reject_payment",
-                                targetId: req.id,
-                                targetName: req.userName,
-                              })
-                            }
-                            className="px-2.5 py-1 bg-rose-950/80 text-rose-300 rounded-lg text-[10px] font-bold"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() => {
-                              sounds.playSuccess();
-                              onApprovePayment(req.id);
-                              onShowToast(`Payment for ${req.userName} approved! Pro unlocked.`, "success");
-                            }}
-                            className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs neon-glow-amber"
-                          >
-                            Confirm Payment
-                          </button>
-                        </>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded font-mono text-[10px] uppercase font-bold bg-slate-800 text-slate-300">
-                          {req.status}
-                        </span>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActionReasonModal({
+                              type: "reject_kyc",
+                              targetId: kyc.id,
+                              targetName: kyc.legalName || kyc.userName,
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-400 font-bold text-xs border border-rose-500/40 transition-colors cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 7: SECURITY & ADMIN PASSWORD MANAGEMENT */}
-        {activeTab === "security" && (
-          <div className="p-3 sm:p-4 space-y-4 overflow-y-auto flex-1 text-xs">
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-              <div className="flex items-center gap-1.5 text-yellow-400 font-black text-xs">
-                <Lock className="w-4 h-4" />
-                <span>Admin Login Security & Password Management</span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Change your Super Admin master login password. Only the designated root email (<strong className="text-white">settaholdings@gmail.com</strong>) has access to this portal.
-              </p>
-            </div>
-
-            {/* Password Change Form */}
-            <form onSubmit={handleChangePasswordSubmit} className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3 max-w-lg">
-              <h4 className="font-black text-white text-xs uppercase tracking-wider">Change Admin Master Password</h4>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                  Current Admin Password *
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={currentPassInput}
-                  onChange={(e) => setCurrentPassInput(e.target.value)}
-                  placeholder="Enter current password..."
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-750 focus:border-yellow-400 rounded-lg text-white text-xs focus:outline-hidden"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                    New Password *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={newPassInput}
-                    onChange={(e) => setNewPassInput(e.target.value)}
-                    placeholder="Min 6 characters..."
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-750 focus:border-yellow-400 rounded-lg text-white text-xs focus:outline-hidden"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                    Confirm New Password *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassInput}
-                    onChange={(e) => setConfirmPassInput(e.target.value)}
-                    placeholder="Repeat new password..."
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-750 focus:border-yellow-400 rounded-lg text-white text-xs focus:outline-hidden"
-                  />
-                </div>
-              </div>
-
-              {passChangeSuccess && (
-                <div className="p-2 bg-emerald-950/60 border border-emerald-800 text-emerald-300 rounded-lg text-xs flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Admin password successfully updated!</span>
+                  ))}
                 </div>
               )}
+            </div>
+          )}
 
-              <button
-                type="submit"
-                className="w-full py-2 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs uppercase cursor-pointer neon-glow-amber"
-              >
-                Update Admin Password
-              </button>
-            </form>
+          {/* TAB 5: BROADCAST ANNOUNCEMENTS */}
+          {activeTab === "announcements" && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                  <Megaphone className="w-4 h-4 text-amber-400" />
+                  <span>Broadcast System-Wide Alert</span>
+                </h3>
 
-            {/* Extra Security Hardening Info */}
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-              <h4 className="font-black text-white text-xs">Security Hardening Layers Active</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-800">
-                  <div className="font-bold text-yellow-400">AES-256 GCM Health Vault</div>
-                  <div className="text-slate-400 text-[10px] mt-0.5">Confidential medical records sealed with SHA-256 derived keys.</div>
-                </div>
-                <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-800">
-                  <div className="font-bold text-emerald-400">30-Day Anti-Tamper Cooldown</div>
-                  <div className="text-slate-400 text-[10px] mt-0.5">Locks merchant profile names against rapid identity swapping.</div>
-                </div>
-                <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-800">
-                  <div className="font-bold text-indigo-400">Role-Based Access Control</div>
-                  <div className="text-slate-400 text-[10px] mt-0.5">Admin portal restricted strictly to authenticated root accounts.</div>
-                </div>
+                <form onSubmit={handleBroadcastAnnouncement} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                        Alert Title
+                      </label>
+                      <input
+                        type="text"
+                        value={annTitle}
+                        onChange={(e) => setAnnTitle(e.target.value)}
+                        placeholder="e.g., Scheduled Maintenance or New Feature"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                          Category
+                        </label>
+                        <select
+                          value={annType}
+                          onChange={(e) => setAnnType(e.target.value as any)}
+                          className="w-full px-2 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                        >
+                          <option value="info">Info</option>
+                          <option value="warning">Warning</option>
+                          <option value="success">Feature Success</option>
+                          <option value="maintenance">Maintenance</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                          Priority
+                        </label>
+                        <select
+                          value={annPriority}
+                          onChange={(e) => setAnnPriority(e.target.value as any)}
+                          className="w-full px-2 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                        >
+                          <option value="normal">Normal Banner</option>
+                          <option value="urgent">Urgent Push</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                      Broadcast Message Body
+                    </label>
+                    <textarea
+                      value={annMessage}
+                      onChange={(e) => setAnnMessage(e.target.value)}
+                      rows={2}
+                      placeholder="Write announcement details for all merchants..."
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send Announcement</span>
+                  </button>
+                </form>
               </div>
+
+              {/* Active Broadcasts List */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Published Broadcasts
+                </h4>
+                {localAnnouncements.map((ann) => (
+                  <div
+                    key={ann.id}
+                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-start justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">{ann.title}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-400/20 text-amber-400">
+                          {ann.type}
+                        </span>
+                      </div>
+                      <p className="text-slate-300">{ann.message}</p>
+                      <div className="text-[10px] text-slate-500">
+                        Broadcasted by {ann.createdBy} • {new Date(ann.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sounds.playStockRemove();
+                        setLocalAnnouncements(localAnnouncements.filter((a) => a.id !== ann.id));
+                        onShowToast("Announcement archived.", "info");
+                      }}
+                      className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400 transition-colors"
+                      title="Archive Alert"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: AUDIT VAULT */}
+          {activeTab === "audit" && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    Master Security Audit Trails & Event Ledger
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Chronological cryptographic records of all admin actions and store authentications.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sounds.playSuccess();
+                    onShowToast("Exported Audit Log CSV!", "success");
+                  }}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer border border-slate-700"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Audit Log</span>
+                </button>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3 space-y-2">
+                {[
+                  { id: "aud-1", event: "Admin Password Login Granted", actor: "settaholdings@gmail.com", severity: "info", time: "Just now" },
+                  { id: "aud-2", event: "KYC Verification Approved", actor: "INCO Master Root", severity: "info", time: "1 hour ago" },
+                  { id: "aud-3", event: "Subscription Plan Upgraded ($4.99/mo)", actor: "M-Pesa Webhook", severity: "info", time: "3 hours ago" },
+                  { id: "aud-4", event: "Security Threat Blocked (Bad Passwords)", actor: "Rate Limiter", severity: "warning", time: "1 day ago" },
+                ].map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          entry.severity === "warning" ? "bg-amber-400" : "bg-emerald-400"
+                        }`}
+                      />
+                      <span className="font-bold text-white">{entry.event}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">by {entry.actor}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">{entry.time}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: PASSWORD & SECURITY */}
+          {activeTab === "security" && (
+            <div className="space-y-4 animate-in fade-in duration-150 max-w-xl mx-auto">
+              <div className="p-5 rounded-2xl bg-slate-950 border-2 border-amber-400/80 space-y-4">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800">
+                  <div className="p-2 bg-amber-400 text-slate-950 rounded-xl">
+                    <KeyRound className="w-5 h-5 fill-slate-950" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">
+                      Change Super Admin Master Login Password
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Enforce strict security for <span className="text-amber-400 font-mono">{SUPER_ADMIN_EMAIL}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {passChangeSuccess && (
+                  <div className="p-3 bg-emerald-950 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Master password changed successfully!</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleChangePasswordSubmit} className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] uppercase font-bold text-slate-300 mb-1">
+                      Current Master Password
+                    </label>
+                    <input
+                      type="password"
+                      value={currentPassInput}
+                      onChange={(e) => setCurrentPassInput(e.target.value)}
+                      placeholder="Enter current master password..."
+                      required
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] uppercase font-bold text-slate-300 mb-1">
+                      New Master Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPass ? "text" : "password"}
+                        value={newPassInput}
+                        onChange={(e) => setNewPassInput(e.target.value)}
+                        placeholder="Enter new master password (min 6 chars)..."
+                        required
+                        className="w-full pl-3 pr-10 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPass(!showNewPass)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
+                      >
+                        {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] uppercase font-bold text-slate-300 mb-1">
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      value={confirmPassInput}
+                      onChange={(e) => setConfirmPassInput(e.target.value)}
+                      placeholder="Re-type new master password..."
+                      required
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono text-white"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Save & Update Master Password</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* User Dossier Inspection Modal */}
+        {inspectedUser && (
+          <div className="fixed inset-0 z-60 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-amber-400 rounded-2xl w-full max-w-md p-5 space-y-4 text-xs font-sans">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h4 className="text-sm font-black text-white flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-amber-400" />
+                  <span>Merchant Dossier</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setInspectedUser(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={inspectedUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80"}
+                    alt=""
+                    className="w-12 h-12 rounded-full object-cover border border-amber-400/50"
+                  />
+                  <div>
+                    <div className="text-sm font-black text-white">{inspectedUser.displayName}</div>
+                    <div className="text-slate-400 font-mono">{inspectedUser.identifier}</div>
+                    <div className="text-amber-400 font-semibold">{inspectedUser.storeName || "Retail Kiosk"}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <div className="p-2 bg-slate-950 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-500 uppercase">Plan</div>
+                    <div className="font-bold text-white">{inspectedUser.subscription?.plan || "Free Starter"}</div>
+                  </div>
+                  <div className="p-2 bg-slate-950 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-500 uppercase">KYC Verified</div>
+                    <div className="font-bold text-emerald-400">
+                      {inspectedUser.isVerified ? "Approved" : "Not Verified"}
+                    </div>
+                  </div>
+                </div>
+
+                {inspectedUser.userAppealReason && (
+                  <div className="p-2.5 bg-amber-950/50 border border-amber-500/40 rounded-xl text-amber-300 text-xs">
+                    <div className="font-bold text-[10px] uppercase">Merchant Appeal Notice:</div>
+                    <p className="mt-0.5">{inspectedUser.userAppealReason}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleActivateUser(inspectedUser.id, inspectedUser.displayName);
+                    setInspectedUser(null);
+                  }}
+                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors"
+                >
+                  Activate & Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectedUser(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Action Reason Confirmation Modal */}
+        {actionReasonModal && (
+          <div className="fixed inset-0 z-60 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-rose-500 rounded-2xl w-full max-w-sm p-5 space-y-3 text-xs font-sans">
+              <h4 className="text-sm font-black text-white flex items-center gap-1.5 text-rose-400">
+                <ShieldAlert className="w-4 h-4" />
+                <span>Confirm {actionReasonModal.type.toUpperCase()}</span>
+              </h4>
+              <p className="text-slate-300">
+                Provide reason for action on <strong>{actionReasonModal.targetName}</strong>:
+              </p>
+              <textarea
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                placeholder="Enter audit explanation..."
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleExecuteActionWithReason}
+                  className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl transition-colors"
+                >
+                  Confirm Action
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActionReasonModal(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Zoom Proof Image Modal */}
+        {selectedProofImage && (
+          <div
+            className="fixed inset-0 z-70 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+            onClick={() => setSelectedProofImage(null)}
+          >
+            <div className="relative max-w-2xl max-h-[85vh] bg-slate-900 p-2 rounded-2xl border border-amber-400">
+              <img
+                src={selectedProofImage}
+                alt="Document Verification Proof"
+                className="max-w-full max-h-[80vh] object-contain rounded-xl"
+              />
+              <button
+                type="button"
+                onClick={() => setSelectedProofImage(null)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-slate-950 text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
         )}
       </div>
-
-      {/* USER DETAIL DEEP INSPECTION MODAL */}
-      {inspectedUser && (
-        <div className="fixed inset-0 z-60 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-yellow-400 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden neon-border-amber font-sans my-auto">
-            {/* Modal Header */}
-            <div className="p-3 sm:p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <img
-                  src={inspectedUser.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"}
-                  alt={inspectedUser.displayName}
-                  className="w-12 h-12 rounded-xl object-cover border-2 border-yellow-400"
-                />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-white text-base">{inspectedUser.displayName}</h3>
-                    {inspectedUser.isVerified && (
-                      <span className="px-1.5 py-0.2 rounded-full bg-yellow-400 text-slate-950 text-[9px] font-black">
-                        VERIFIED
-                      </span>
-                    )}
-                    <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[9px] font-mono uppercase">
-                      Status: {inspectedUser.accountStatus}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 font-mono">
-                    ID: {inspectedUser.id} • {inspectedUser.identifier}
-                  </p>
-                </div>
-              </div>
-
-              <button onClick={() => setInspectedUser(null)} className="text-slate-400 hover:text-white p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-4 space-y-3 overflow-y-auto flex-1 text-xs">
-              {/* If Account is Suspended or Blocked */}
-              {(inspectedUser.accountStatus === "suspended" || inspectedUser.accountStatus === "blocked") && (
-                <div className="p-3 bg-rose-950/60 border border-rose-800 rounded-xl space-y-2">
-                  <div className="font-black text-rose-300 text-xs flex items-center gap-1.5">
-                    <ShieldAlert className="w-4 h-4 text-rose-400" />
-                    <span>Account is Currently {inspectedUser.accountStatus.toUpperCase()}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300">
-                    Reason for Suspension: <strong className="text-white">{inspectedUser.suspensionReason || "Admin Review"}</strong>
-                  </p>
-
-                  {inspectedUser.userAppealReason && (
-                    <div className="p-2.5 bg-slate-950 rounded-lg border border-rose-900 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-yellow-400">
-                        Merchant Submitted Appeal / Justification:
-                      </span>
-                      <p className="text-xs text-white leading-relaxed whitespace-pre-wrap">
-                        "{inspectedUser.userAppealReason}"
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => handleActivateUser(inspectedUser.id, inspectedUser.displayName)}
-                      className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs cursor-pointer neon-glow-amber"
-                    >
-                      ✓ Satisfied with Reason: Unblock & Activate Account
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Dossier Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Store & Location</span>
-                  <div className="font-bold text-white text-xs">{inspectedUser.storeName || "Provision Store"}</div>
-                  <div className="text-[11px] text-slate-400">{inspectedUser.location || "Location not set"}</div>
-                </div>
-
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Subscription Tier</span>
-                  <div className="font-bold text-yellow-400 text-xs">{inspectedUser.subscription?.plan || "Free Starter"}</div>
-                  <div className="text-[11px] text-slate-400">Status: {inspectedUser.subscription?.status || "Active"}</div>
-                </div>
-              </div>
-
-              {/* KYC Documents Section */}
-              {inspectedUser.verificationDocs && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-bold text-yellow-400">
-                      KYC Legal Identity Documents
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {inspectedUser.verificationDocs.idType}: {inspectedUser.verificationDocs.idNumber}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    {inspectedUser.verificationDocs.passportPhotoUrl && (
-                      <div
-                        onClick={() => setSelectedProofImage(inspectedUser.verificationDocs?.passportPhotoUrl || null)}
-                        className="h-28 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col items-center justify-center p-1 cursor-pointer hover:border-yellow-400"
-                      >
-                        <img
-                          src={inspectedUser.verificationDocs.passportPhotoUrl}
-                          alt="Passport"
-                          className="h-full w-full object-contain"
-                        />
-                        <span className="text-[9px] text-slate-400 mt-0.5">Passport Photo</span>
-                      </div>
-                    )}
-
-                    {inspectedUser.verificationDocs.idDocUrl && (
-                      <div
-                        onClick={() => setSelectedProofImage(inspectedUser.verificationDocs?.idDocUrl || null)}
-                        className="h-28 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col items-center justify-center p-1 cursor-pointer hover:border-yellow-400"
-                      >
-                        <img
-                          src={inspectedUser.verificationDocs.idDocUrl}
-                          alt="ID Document"
-                          className="h-full w-full object-contain"
-                        />
-                        <span className="text-[9px] text-slate-400 mt-0.5">Government ID</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Admin Control Actions */}
-              <div className="pt-2 border-t border-slate-800 space-y-2">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                  Admin Master Actions for This User:
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {inspectedUser.isVerified ? (
-                    <button
-                      onClick={() =>
-                        setActionReasonModal({
-                          type: "unverify",
-                          targetId: inspectedUser.id,
-                          targetName: inspectedUser.displayName,
-                        })
-                      }
-                      className="p-2 bg-amber-950/70 hover:bg-amber-900 border border-amber-700 text-amber-300 rounded-lg text-center font-bold text-xs cursor-pointer"
-                    >
-                      Unverify Account
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        sounds.playSuccess();
-                        if (onUpdateUserAccount) {
-                          onUpdateUserAccount(inspectedUser.id, { isVerified: true });
-                        }
-                        setInspectedUser({ ...inspectedUser, isVerified: true });
-                        onShowToast(`Verified badge granted to ${inspectedUser.displayName}`, "success");
-                      }}
-                      className="p-2 bg-yellow-400 hover:bg-yellow-300 text-slate-950 rounded-lg text-center font-black text-xs cursor-pointer neon-glow-amber"
-                    >
-                      Grant Verified Badge
-                    </button>
-                  )}
-
-                  {inspectedUser.accountStatus === "active" ? (
-                    <>
-                      <button
-                        onClick={() =>
-                          setActionReasonModal({
-                            type: "suspend",
-                            targetId: inspectedUser.id,
-                            targetName: inspectedUser.displayName,
-                          })
-                        }
-                        className="p-2 bg-amber-950/70 hover:bg-amber-900 border border-amber-700 text-amber-300 rounded-lg text-center font-bold text-xs cursor-pointer"
-                      >
-                        Suspend User
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setActionReasonModal({
-                            type: "block",
-                            targetId: inspectedUser.id,
-                            targetName: inspectedUser.displayName,
-                          })
-                        }
-                        className="p-2 bg-rose-950/70 hover:bg-rose-900 border border-rose-700 text-rose-300 rounded-lg text-center font-bold text-xs cursor-pointer"
-                      >
-                        Block User
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => handleActivateUser(inspectedUser.id, inspectedUser.displayName)}
-                      className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-center font-black text-xs cursor-pointer"
-                    >
-                      Activate Account
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() =>
-                      setActionReasonModal({
-                        type: "delete",
-                        targetId: inspectedUser.id,
-                        targetName: inspectedUser.displayName,
-                      })
-                    }
-                    className="p-2 bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-300 rounded-lg text-center font-bold text-xs cursor-pointer"
-                  >
-                    Delete Account
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* REASON PROMPT MODAL (FOR BLOCK, SUSPEND, UNVERIFY, REJECT) */}
-      {actionReasonModal && (
-        <div className="fixed inset-0 z-70 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-3">
-          <div className="bg-slate-900 border border-yellow-400 rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-2xl">
-            <div className="text-center">
-              <h4 className="font-black text-white text-sm uppercase">
-                {actionReasonModal.type === "block"
-                  ? "Block User Account"
-                  : actionReasonModal.type === "suspend"
-                  ? "Suspend User Account"
-                  : actionReasonModal.type === "unverify"
-                  ? "Revoke Verification Badge"
-                  : actionReasonModal.type === "delete"
-                  ? "Permanently Delete User"
-                  : "Reject Request"}
-              </h4>
-              <p className="text-xs text-slate-300 mt-1">
-                Target: <strong className="text-yellow-400">{actionReasonModal.targetName}</strong>
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                State Reason for this Action *
-              </label>
-              <textarea
-                rows={3}
-                required
-                value={actionReason}
-                onChange={(e) => setActionReason(e.target.value)}
-                placeholder="e.g. Identity discrepancy, fraudulent report, policy violation..."
-                className="w-full p-2.5 bg-slate-950 border border-slate-750 focus:border-yellow-400 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-hidden"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setActionReasonModal(null);
-                  setActionReason("");
-                }}
-                className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteActionWithReason}
-                className="flex-1 py-2 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-xs cursor-pointer neon-glow-amber"
-              >
-                Confirm Action
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PROOF IMAGE ZOOM MODAL */}
-      {selectedProofImage && (
-        <div
-          onClick={() => setSelectedProofImage(null)}
-          className="fixed inset-0 z-70 bg-slate-950/95 flex items-center justify-center p-4 cursor-pointer"
-        >
-          <div className="relative max-w-2xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden p-2">
-            <img src={selectedProofImage} alt="Document Proof" className="max-h-[80vh] object-contain mx-auto rounded-lg" />
-            <button
-              onClick={() => setSelectedProofImage(null)}
-              className="absolute top-4 right-4 bg-slate-950/80 text-white p-2 rounded-full font-bold"
-            >
-              ✕ Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

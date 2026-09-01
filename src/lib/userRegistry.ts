@@ -200,6 +200,82 @@ export function verifyOtpCode(
   }
 }
 
+export interface ResetTokenSession {
+  target: string;
+  token: string;
+  expiresAt: number;
+  createdAt: number;
+}
+
+const STORAGE_RESET_TOKEN_KEY = "inco_reset_token_session_v1";
+
+export function generateResetToken(target: string): { token: string; expiresAt: number } {
+  const cleanTarget = target.trim().toLowerCase();
+  // Generate formatted mock reset token e.g. RST-482915
+  const randomNum = Math.floor(100000 + Math.random() * 900000);
+  const token = `RST-${randomNum}`;
+  const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes validity
+
+  const session: ResetTokenSession = {
+    target: cleanTarget,
+    token,
+    expiresAt,
+    createdAt: Date.now(),
+  };
+
+  try {
+    localStorage.setItem(STORAGE_RESET_TOKEN_KEY, JSON.stringify(session));
+  } catch (e) {}
+
+  return { token, expiresAt };
+}
+
+export function getActiveResetTokenSession(): ResetTokenSession | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_RESET_TOKEN_KEY);
+    if (raw) {
+      const parsed: ResetTokenSession = JSON.parse(raw);
+      if (parsed.expiresAt > Date.now()) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+export function verifyResetToken(target: string, enteredToken: string): { success: boolean; error?: string } {
+  const cleanTarget = target.trim().toLowerCase();
+  const cleanToken = enteredToken.trim().toUpperCase();
+
+  try {
+    const raw = localStorage.getItem(STORAGE_RESET_TOKEN_KEY);
+    if (!raw) {
+      return { success: false, error: "No active reset token found. Please request a new reset token." };
+    }
+
+    const session: ResetTokenSession = JSON.parse(raw);
+    if (session.target !== cleanTarget) {
+      return { success: false, error: "Reset token was requested for a different email or phone number." };
+    }
+    if (Date.now() > session.expiresAt) {
+      return { success: false, error: "Reset token has expired (15-minute limit). Please generate a new one." };
+    }
+    if (session.token.toUpperCase() !== cleanToken && session.token.replace("RST-", "") !== cleanToken) {
+      return { success: false, error: "Invalid reset token. Please check and try again." };
+    }
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: "Token verification failed. Please try again." };
+  }
+}
+
+export function clearResetToken(): void {
+  try {
+    localStorage.removeItem(STORAGE_RESET_TOKEN_KEY);
+  } catch (e) {}
+}
+
 export function updateAccountPassword(emailOrPhone: string, newPassword: string): boolean {
   const cleanId = emailOrPhone.trim().toLowerCase();
   const accounts = loadRegisteredAccounts();
@@ -236,6 +312,32 @@ export function updateAccountPassword(emailOrPhone: string, newPassword: string)
   }
 
   return true;
+}
+
+export function getAdminMasterPassword(): string {
+  try {
+    const saved = localStorage.getItem("inco_admin_master_password");
+    if (saved && saved.trim()) {
+      return saved.trim();
+    }
+    const accounts = loadRegisteredAccounts();
+    const admin = accounts.find((a) => a.emailOrPhone.toLowerCase() === SUPER_ADMIN_EMAIL);
+    if (admin?.passwordHash) {
+      return admin.passwordHash;
+    }
+  } catch (e) {}
+  return DEFAULT_ADMIN_PASS;
+}
+
+export function verifyAdminMasterPassword(enteredPass: string): boolean {
+  if (!enteredPass) return false;
+  const currentPass = getAdminMasterPassword();
+  return enteredPass.trim() === currentPass;
+}
+
+export function setAdminMasterPassword(newPass: string): boolean {
+  if (!newPass || newPass.length < 6) return false;
+  return updateAccountPassword(SUPER_ADMIN_EMAIL, newPass);
 }
 
 export function convertAccountToUserProfile(acc: RegisteredAccount): UserProfile {

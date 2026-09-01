@@ -169,7 +169,7 @@ class SoundEffects {
     } catch (e) {}
   }
 
-  public triggerHaptic(duration: number = 15) {
+  public triggerHaptic(duration: number | number[] = 15) {
     if (typeof window !== "undefined" && "navigator" in window && navigator.vibrate) {
       try {
         navigator.vibrate(duration);

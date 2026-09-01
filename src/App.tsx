@@ -27,6 +27,7 @@ import { ProfileModal } from "./components/ProfileModal";
 import { AdminPortalModal } from "./components/AdminPortalModal";
 import { SubscriptionModal } from "./components/SubscriptionModal";
 import { ToolsPageView } from "./components/ToolsPageView";
+import { SalesSuccessOverlay, SaleSuccessInfo } from "./components/SalesSuccessOverlay";
 import { SalePaymentDetails } from "./components/QuickSaleModal";
 import {
   InventoryItem,
@@ -163,6 +164,8 @@ export function App() {
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(() => {
     return !getActiveSessionUser();
   });
+  const [authInitialTab, setAuthInitialTab] = useState<"signin" | "signup">("signin");
+  const [saleSuccessInfo, setSaleSuccessInfo] = useState<SaleSuccessInfo | null>(null);
 
   // Convert active account to userProfile
   const userProfile: UserProfile = useMemo(() => {
@@ -807,6 +810,16 @@ export function App() {
       origin: { y: 0.7 },
     });
 
+    const totalItemCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
+    setSaleSuccessInfo({
+      totalAmount,
+      currencySymbol: settings.currencySymbol,
+      itemCount: totalItemCount,
+      customerName: paymentDetails?.customerName || "Walk-in Cash Customer",
+      paymentStatus: paymentDetails?.paymentStatus || "paid",
+      notes: paymentDetails?.notes,
+    });
+
     showToast(
       `Sale completed: ${settings.currencySymbol}${totalAmount.toFixed(2)} recorded!`,
       "success"
@@ -911,6 +924,11 @@ export function App() {
         <SplashScreen
           onEnterApp={handleEnterApp}
           onOpenAuth={() => {
+            setShowSplash(false);
+            setIsAuthOpen(true);
+          }}
+          onOpenAuthTab={(tab) => {
+            setAuthInitialTab(tab);
             setShowSplash(false);
             setIsAuthOpen(true);
           }}
@@ -1376,11 +1394,18 @@ export function App() {
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
+        initialTab={authInitialTab}
         currentUserAccount={currentAccount}
         onSuccessLogin={handleSuccessLogin}
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
         strictMode={!currentAccount}
+      />
+
+      <SalesSuccessOverlay
+        isOpen={Boolean(saleSuccessInfo)}
+        saleInfo={saleSuccessInfo}
+        onClose={() => setSaleSuccessInfo(null)}
       />
 
       <SettingsModal

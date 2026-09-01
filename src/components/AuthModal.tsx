@@ -1,23 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import React, { useState } from "react";
+import { motion } from "motion/react";
 import {
   X,
-  Phone,
   Mail,
   Lock,
   Eye,
   EyeOff,
   ShieldCheck,
   ArrowRight,
-  CheckCircle2,
   AlertCircle,
-  ScanLine,
-  Box,
-  PieChart,
   ChevronLeft,
-  RefreshCw,
   Check,
-  Sparkles,
+  KeyRound,
+  Copy,
 } from "lucide-react";
 import { BrandLogo } from "./BrandLogo";
 import {
@@ -27,8 +22,9 @@ import {
   loadRegisteredAccounts,
   saveRegisteredAccounts,
   setActiveSessionUser,
-  generateAndStoreOtp,
-  verifyOtpCode,
+  generateResetToken,
+  verifyResetToken,
+  clearResetToken,
   updateAccountPassword,
 } from "../lib/userRegistry";
 import { sounds } from "../lib/sound";
@@ -42,10 +38,11 @@ interface AuthModalProps {
   onDeleteAccount?: (accountId: string) => void;
   strictMode?: boolean;
   onShowToast?: (msg: string, type?: "success" | "error" | "info") => void;
+  initialTab?: "signup" | "login";
 }
 
 type AuthTab = "signup" | "login";
-type AuthStep = "form" | "otp" | "forgot_password" | "reset_password";
+type AuthStep = "form" | "forgot_password" | "reset_password";
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -55,9 +52,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLogout,
   strictMode = false,
   onShowToast,
+  initialTab = "login",
 }) => {
-  const [activeTab, setActiveTab] = useState<AuthTab>("signup");
+  const [activeTab, setActiveTab] = useState<AuthTab>(initialTab);
   const [authStep, setAuthStep] = useState<AuthStep>("form");
+
+  // Reset tab when modal opens or initialTab changes
+  React.useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+      setAuthStep("form");
+      setErrorMsg(null);
+    }
+  }, [isOpen, initialTab]);
 
   // Form Fields
   const [identifier, setIdentifier] = useState("");
@@ -67,70 +74,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // OTP Verification
-  const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
-  const [otpCountdown, setOtpCountdown] = useState<number>(300);
+  // Mock Reset Token & Password Recovery Fields
   const [pendingTarget, setPendingTarget] = useState<string>("");
-  const [pendingAccount, setPendingAccount] = useState<RegisteredAccount | null>(null);
-  const [otpPurpose, setOtpPurpose] = useState<"login" | "signup" | "reset_password">("signup");
-
-  // Reset Password Fields
+  const [generatedMockToken, setGeneratedMockToken] = useState<string>("");
+  const [enteredResetToken, setEnteredResetToken] = useState<string>("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [hasCopiedToken, setHasCopiedToken] = useState(false);
 
   // Status
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  // OTP Countdown timer
-  useEffect(() => {
-    let timer: any;
-    if (authStep === "otp" && otpCountdown > 0) {
-      timer = setInterval(() => {
-        setOtpCountdown((prev) => Math.max(0, prev - 1));
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [authStep, otpCountdown]);
 
   if (!isOpen) return null;
 
-  const triggerOtpDispatch = (target: string, purpose: "login" | "signup" | "reset_password") => {
-    const { code } = generateAndStoreOtp(target, purpose);
-    setPendingTarget(target);
-    setOtpPurpose(purpose);
-    setOtpCountdown(300);
-    setOtpCode(["", "", "", "", "", ""]);
-    setAuthStep("otp");
-    sounds.playSuccess();
-
-    // Notify user via simulated email/SMS delivery toast without leaking system secrets
-    const maskedTarget = target.includes("@")
-      ? target.replace(/^(.{2})(.*)(@.*)$/, "$1***$3")
-      : target.slice(0, 3) + "***" + target.slice(-3);
-
-    if (onShowToast) {
-      onShowToast(
-        `📩 Verification code dispatched to ${maskedTarget} (Code: ${code})`,
-        "info"
-      );
-    }
-
-    setTimeout(() => {
-      otpInputRefs.current[0]?.focus();
-    }, 150);
-  };
-
-  // Submit Sign Up
+  // Submit Sign Up - Instant Direct Registration & Login
   const handleSignUpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playClick();
     setErrorMsg(null);
-    setSuccessMsg(null);
 
     const cleanId = identifier.trim().toLowerCase();
     if (!cleanId || (!cleanId.includes("@") && cleanId.length < 6)) {
@@ -182,17 +145,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         createdAt: new Date().toISOString(),
       };
 
-      setPendingAccount(newAccount);
-      triggerOtpDispatch(cleanId, "signup");
-    }, 200);
+      // Save new user account and activate session immediately
+      const updatedAccounts = [newAccount, ...accounts.filter((a) => a.id !== newAccount.id)];
+      saveRegisteredAccounts(updatedAccounts);
+      setActiveSessionUser(newAccount);
+      sounds.playSuccess();
+      onSuccessLogin(newAccount);
+      onClose();
+
+      if (onShowToast) {
+        onShowToast(`🎉 Account created! Welcome to INCO Smart Shop, ${newAccount.displayName}!`, "success");
+      }
+    }, 150);
   };
 
-  // Submit Login
+  // Submit Login - Instant Direct Authentication
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playClick();
     setErrorMsg(null);
-    setSuccessMsg(null);
 
     const cleanId = identifier.trim().toLowerCase();
     if (!cleanId) {
@@ -217,7 +188,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           localStorage.getItem("inco_admin_master_password") || DEFAULT_ADMIN_PASS;
 
         if (password.trim() !== activeAdminPass && (!existing || password.trim() !== existing.passwordHash)) {
-          setErrorMsg("Incorrect credentials. Please check and try again.");
+          setErrorMsg("Incorrect admin password. Please verify and try again.");
           return;
         }
 
@@ -237,18 +208,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           createdAt: new Date().toISOString(),
         };
 
-        setPendingAccount(adminAcc);
-        triggerOtpDispatch(cleanId, "login");
+        setActiveSessionUser(adminAcc);
+        sounds.playSuccess();
+        onSuccessLogin(adminAcc);
+        onClose();
+
+        if (onShowToast) {
+          onShowToast(`👋 Welcome Master Admin (${SUPER_ADMIN_EMAIL})!`, "success");
+        }
         return;
       }
 
       if (!existing) {
-        setErrorMsg("Account not found. Please verify your credentials or create an account.");
+        setErrorMsg("Account not found. Please verify credentials or switch to Sign Up.");
         return;
       }
 
       if (existing.passwordHash && existing.passwordHash !== password.trim()) {
-        setErrorMsg("Incorrect password. Please try again or reset your password.");
+        setErrorMsg("Incorrect password. Please check your password or click Forgot Password.");
         return;
       }
 
@@ -257,12 +234,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
 
-      setPendingAccount(existing);
-      triggerOtpDispatch(cleanId, "login");
-    }, 200);
+      // Successful merchant login
+      setActiveSessionUser(existing);
+      sounds.playSuccess();
+      onSuccessLogin(existing);
+      onClose();
+
+      if (onShowToast) {
+        onShowToast(`👋 Welcome back, ${existing.displayName}!`, "success");
+      }
+    }, 150);
   };
 
-  // Submit Forgot Password Request
+  // Submit Forgot Password Request -> Generate Mock Reset Token
   const handleForgotPasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playClick();
@@ -281,91 +265,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    triggerOtpDispatch(cleanId, "reset_password");
-  };
-
-  // OTP Digit Change
-  const handleOtpDigitChange = (index: number, val: string) => {
-    const cleanVal = val.replace(/\D/g, "").slice(-1);
-    const newOtp = [...otpCode];
-    newOtp[index] = cleanVal;
-    setOtpCode(newOtp);
-
-    if (cleanVal && index < 5) {
-      otpInputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !otpCode[index] && index > 0) {
-      otpInputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handlePasteOtp = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (pasted) {
-      const newOtp = ["", "", "", "", "", ""];
-      for (let i = 0; i < pasted.length; i++) {
-        newOtp[i] = pasted[i];
-      }
-      setOtpCode(newOtp);
-      const nextFocus = Math.min(pasted.length, 5);
-      otpInputRefs.current[nextFocus]?.focus();
-    }
-  };
-
-  // Verify OTP Code
-  const handleVerifyOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    sounds.playClick();
-    setErrorMsg(null);
-
-    const fullCode = otpCode.join("");
-    if (fullCode.length !== 6) {
-      setErrorMsg("Please enter the complete 6-digit OTP code.");
-      return;
-    }
-
-    const verificationResult = verifyOtpCode(pendingTarget, fullCode, otpPurpose);
-    if (!verificationResult.success) {
-      setErrorMsg(verificationResult.error || "Invalid OTP code. Please check and try again.");
-      sounds.playBeep();
-      return;
-    }
-
+    const { token } = generateResetToken(cleanId);
+    setPendingTarget(cleanId);
+    setGeneratedMockToken(token);
+    setEnteredResetToken(token); // Pre-fill token for seamless UX
+    setAuthStep("reset_password");
     sounds.playSuccess();
 
-    if (otpPurpose === "reset_password") {
-      setAuthStep("reset_password");
-      setSuccessMsg("OTP verified! Create your new password below.");
-      return;
-    }
-
-    if (otpPurpose === "signup" && pendingAccount) {
-      const accounts = loadRegisteredAccounts();
-      const updated = [pendingAccount, ...accounts.filter((a) => a.id !== pendingAccount.id)];
-      saveRegisteredAccounts(updated);
-      setActiveSessionUser(pendingAccount);
-      onSuccessLogin(pendingAccount);
-      onClose();
-      return;
-    }
-
-    if (otpPurpose === "login" && pendingAccount) {
-      setActiveSessionUser(pendingAccount);
-      onSuccessLogin(pendingAccount);
-      onClose();
-      return;
+    if (onShowToast) {
+      onShowToast(`🔑 Mock Reset Token Generated: ${token}`, "info");
     }
   };
 
-  // Save New Reset Password
+  // Copy Mock Token Helper
+  const handleCopyMockToken = () => {
+    if (generatedMockToken) {
+      navigator.clipboard.writeText(generatedMockToken);
+      setHasCopiedToken(true);
+      sounds.playClick();
+      setTimeout(() => setHasCopiedToken(false), 2000);
+      if (onShowToast) {
+        onShowToast("📋 Reset token copied to clipboard!", "info");
+      }
+    }
+  };
+
+  // Save New Reset Password with Token Verification
   const handleSaveResetPassword = (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playClick();
     setErrorMsg(null);
+
+    if (!enteredResetToken.trim()) {
+      setErrorMsg("Please enter the reset token.");
+      return;
+    }
+
+    const verifyResult = verifyResetToken(pendingTarget, enteredResetToken.trim());
+    if (!verifyResult.success) {
+      setErrorMsg(verifyResult.error || "Invalid or expired reset token.");
+      return;
+    }
 
     if (newPassword.length < 4) {
       setErrorMsg("New password must be at least 4 characters long.");
@@ -382,18 +322,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    clearResetToken();
     sounds.playSuccess();
-    setSuccessMsg("Password successfully reset! You can now log in.");
-    setPassword(newPassword.trim());
-    setNewPassword("");
-    setConfirmNewPassword("");
-    setActiveTab("login");
-    setAuthStep("form");
-  };
+    const accounts = loadRegisteredAccounts();
+    const existing = accounts.find((a) => a.emailOrPhone.toLowerCase() === pendingTarget.toLowerCase());
 
-  const handleResendOtp = () => {
-    sounds.playClick();
-    triggerOtpDispatch(pendingTarget, otpPurpose);
+    if (existing) {
+      setActiveSessionUser(existing);
+      onSuccessLogin(existing);
+    }
+    onClose();
+
+    if (onShowToast) {
+      onShowToast("✅ Password updated successfully! You are now logged in.", "success");
+    }
   };
 
   return (
@@ -425,12 +367,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               INCO <span className="text-amber-500 dark:text-amber-400">Smart Shop</span>
             </h2>
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              {authStep === "otp"
-                ? "Security Verification"
-                : authStep === "forgot_password"
+              {authStep === "forgot_password"
                 ? "Password Recovery"
                 : authStep === "reset_password"
-                ? "Set New Password"
+                ? "Verify Token & Reset"
                 : activeTab === "signup"
                 ? "Merchant Registration"
                 : "Merchant Sign In"}
@@ -439,89 +379,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         <div>
-          {authStep === "otp" ? (
+          {authStep === "forgot_password" ? (
             /* ========================================================================= */
-            /* OTP VERIFICATION STEP */
-            /* ========================================================================= */
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    sounds.playClick();
-                    setAuthStep(otpPurpose === "reset_password" ? "forgot_password" : "form");
-                    setErrorMsg(null);
-                  }}
-                  className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <h3 className="text-base font-black text-slate-900 dark:text-white">
-                  Verify Your Account
-                </h3>
-              </div>
-
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
-                Enter the 6-digit verification code sent to{" "}
-                <strong className="text-slate-900 dark:text-amber-400 font-mono">{pendingTarget}</strong>.
-              </p>
-
-              {errorMsg && (
-                <div className="mb-2.5 p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleVerifyOtp} className="space-y-3">
-                <div className="flex justify-between gap-1 sm:gap-1.5">
-                  {otpCode.map((digit, index) => (
-                    <input
-                      key={index}
-                      ref={(el) => {
-                        otpInputRefs.current[index] = el;
-                      }}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpDigitChange(index, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                      onPaste={handlePasteOtp}
-                      className="w-10 h-11 text-center text-lg font-black font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all"
-                    />
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
-                  <span>
-                    Expires in:{" "}
-                    <strong className="font-mono text-slate-700 dark:text-slate-200">
-                      {Math.floor(otpCountdown / 60)}:{(otpCountdown % 60).toString().padStart(2, "0")}
-                    </strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    className="text-amber-600 dark:text-amber-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Resend Code</span>
-                  </button>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-1"
-                >
-                  <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
-                  <span>Verify & Continue</span>
-                </button>
-              </form>
-            </div>
-          ) : authStep === "forgot_password" ? (
-            /* ========================================================================= */
-            /* FORGOT PASSWORD STEP */
+            /* FORGOT PASSWORD STEP: Request Mock Reset Token */
             /* ========================================================================= */
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -542,7 +402,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
-                Enter your registered email address or phone number to receive a verification OTP code.
+                Enter your registered email address or phone number to generate a secure reset token.
               </p>
 
               {errorMsg && (
@@ -555,7 +415,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <form onSubmit={handleForgotPasswordSubmit} className="space-y-2.5">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Email or Phone
+                    Email or Phone Number
                   </label>
                   <div className="relative">
                     <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -563,7 +423,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="text"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="Enter email address or phone number"
+                      placeholder="Enter email or phone number"
                       required
                       className="w-full pl-8.5 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-hidden focus:border-amber-400 transition-all font-mono"
                     />
@@ -574,22 +434,70 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type="submit"
                   className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-3"
                 >
-                  <span>Send Verification Code</span>
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Generate Reset Token</span>
                   <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
                 </button>
               </form>
             </div>
           ) : authStep === "reset_password" ? (
             /* ========================================================================= */
-            /* SET NEW PASSWORD STEP */
+            /* SET NEW PASSWORD WITH MOCK RESET TOKEN STEP */
             /* ========================================================================= */
             <div>
-              <h3 className="text-base font-black text-slate-900 dark:text-white mb-1">
-                Create New Password
-              </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
-                Set a new secure password for <strong className="text-slate-900 dark:text-amber-400">{pendingTarget}</strong>.
-              </p>
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    setAuthStep("forgot_password");
+                    setErrorMsg(null);
+                  }}
+                  className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <h3 className="text-base font-black text-slate-900 dark:text-white">
+                  Enter Token & New Password
+                </h3>
+              </div>
+
+              {/* Generated Mock Token Highlight Card */}
+              {generatedMockToken && (
+                <div className="mb-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 text-slate-900 dark:text-white">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <KeyRound className="w-3 h-3" />
+                      Mock Reset Token (Valid 15m)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyMockToken}
+                      className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 font-bold cursor-pointer"
+                    >
+                      {hasCopiedToken ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-500" />
+                          <span className="text-emerald-500">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between bg-white dark:bg-slate-900/80 px-2.5 py-1.5 rounded-xl border border-amber-400/30">
+                    <span className="font-mono text-sm font-black text-amber-600 dark:text-amber-400 tracking-wider">
+                      {generatedMockToken}
+                    </span>
+                    <span className="text-[9px] text-slate-500 dark:text-slate-400">
+                      for {pendingTarget}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {errorMsg && (
                 <div className="mb-2.5 p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-1.5">
@@ -601,6 +509,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <form onSubmit={handleSaveResetPassword} className="space-y-2.5">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Reset Token
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={enteredResetToken}
+                      onChange={(e) => setEnteredResetToken(e.target.value)}
+                      placeholder="e.g. RST-123456"
+                      required
+                      className="w-full pl-8.5 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-hidden focus:border-amber-400 transition-all font-mono font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                     New Password
                   </label>
                   <div className="relative">
@@ -609,7 +534,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Create password"
+                      placeholder="Create new password"
                       required
                       className="w-full pl-8.5 pr-8 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-hidden focus:border-amber-400 transition-all"
                     />
@@ -633,7 +558,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type={showNewPassword ? "text" : "password"}
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}
-                      placeholder="Confirm password"
+                      placeholder="Confirm new password"
                       required
                       className="w-full pl-8.5 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs focus:outline-hidden focus:border-amber-400 transition-all"
                     />
@@ -645,7 +570,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-3"
                 >
                   <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  <span>Save Password & Log In</span>
+                  <span>Verify Token & Reset Password</span>
                 </button>
               </form>
             </div>
@@ -656,28 +581,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div>
               {/* Tab Switcher */}
               <div className="flex border-b border-slate-200 dark:border-slate-800 mb-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    sounds.playClick();
-                    setActiveTab("signup");
-                    setErrorMsg(null);
-                  }}
-                  className={`pb-2 px-3 text-xs font-black relative transition-colors cursor-pointer ${
-                    activeTab === "signup"
-                      ? "text-slate-950 dark:text-amber-400"
-                      : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                  }`}
-                >
-                  Sign Up
-                  {activeTab === "signup" && (
-                    <motion.div
-                      layoutId="activeAuthUnderline"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400"
-                    />
-                  )}
-                </button>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -693,6 +596,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 >
                   Login
                   {activeTab === "login" && (
+                    <motion.div
+                      layoutId="activeAuthUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400"
+                    />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    setActiveTab("signup");
+                    setErrorMsg(null);
+                  }}
+                  className={`pb-2 px-3 text-xs font-black relative transition-colors cursor-pointer ${
+                    activeTab === "signup"
+                      ? "text-slate-950 dark:text-amber-400"
+                      : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                  }`}
+                >
+                  Sign Up
+                  {activeTab === "signup" && (
                     <motion.div
                       layoutId="activeAuthUnderline"
                       className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400"
@@ -716,7 +641,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               >
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Email or Phone
+                    Email or Phone Number
                   </label>
                   <div className="relative">
                     <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -828,7 +753,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </form>
 
               {/* Bottom Toggle Link */}
-              <div className="text-center pt-2.5 text-xs text-slate-500 dark:text-slate-400">
+              <div className="text-center pt-3 text-xs text-slate-500 dark:text-slate-400">
                 {activeTab === "signup" ? (
                   <>
                     Already have an account?{" "}
@@ -879,3 +804,4 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     </div>
   );
 };
+
