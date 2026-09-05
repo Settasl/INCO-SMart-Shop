@@ -53,6 +53,9 @@ import {
   getActiveSessionUser,
   setActiveSessionUser,
   convertAccountToUserProfile,
+  syncUsersWithServer,
+  updateUserOnBackend,
+  deleteUserOnBackend,
 } from "./lib/userRegistry";
 import {
   syncItemsToFirestore,
@@ -164,7 +167,7 @@ export function App() {
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(() => {
     return !getActiveSessionUser();
   });
-  const [authInitialTab, setAuthInitialTab] = useState<"signin" | "signup">("signin");
+  const [authInitialTab, setAuthInitialTab] = useState<"login" | "signup">("login");
   const [saleSuccessInfo, setSaleSuccessInfo] = useState<SaleSuccessInfo | null>(null);
 
   // Convert active account to userProfile
@@ -314,6 +317,41 @@ export function App() {
     localStorage.setItem("inco_verification_requests", JSON.stringify(verificationRequests));
   }, [verificationRequests]);
 
+  // Initial and reactive sync of registered users with the backend database
+  useEffect(() => {
+    // 1. Sync on mount
+    syncUsersWithServer()
+      .then((synced) => {
+        if (Array.isArray(synced) && synced.length > 0) {
+          setRegisteredAccounts(synced);
+        }
+      })
+      .catch(() => {});
+
+    // 2. Listen to local and cross-tab user account updates
+    const handleRemoteUsersUpdate = () => {
+      setRegisteredAccounts(loadRegisteredAccounts());
+    };
+    window.addEventListener("inco:users-updated", handleRemoteUsersUpdate);
+
+    // 3. Sync whenever connectivity comes online
+    const handleOnline = () => {
+      syncUsersWithServer()
+        .then((synced) => {
+          if (Array.isArray(synced) && synced.length > 0) {
+            setRegisteredAccounts(synced);
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      window.removeEventListener("inco:users-updated", handleRemoteUsersUpdate);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []);
+
   const handleToggleDarkMode = () => {
     setDarkMode((prev) => !prev);
   };
@@ -383,23 +421,19 @@ export function App() {
   };
 
   // Verification request submit
-  const handleSubmitVerification = (data: {
-    documentType: any;
-    documentNumber: string;
-    documentUrl?: string;
-  }) => {
+  const handleSubmitVerification = (data: any) => {
     if (!currentAccount) return;
 
     const newReq: VerificationRequest = {
       id: "ver-req-" + Date.now(),
       userId: currentAccount.id,
       userEmailOrPhone: currentAccount.emailOrPhone,
-      userName: currentAccount.displayName || currentAccount.emailOrPhone,
-      legalName: currentAccount.displayName || currentAccount.emailOrPhone,
-      idType: data.documentType || "National ID",
-      idNumber: data.documentNumber,
-      passportPhotoUrl: currentAccount.avatarUrl,
-      idDocUrl: data.documentUrl || "",
+      userName: data.userName || currentAccount.displayName || currentAccount.emailOrPhone,
+      legalName: data.legalName || currentAccount.displayName || currentAccount.emailOrPhone,
+      idType: data.idType || data.documentType || "National ID",
+      idNumber: data.idNumber || data.documentNumber || "ID-DOC",
+      passportPhotoUrl: data.passportPhotoUrl || currentAccount.avatarUrl,
+      idDocUrl: data.idDocUrl || data.documentUrl || "",
       status: "pending",
       submittedAt: new Date().toISOString(),
     };
@@ -452,10 +486,12 @@ export function App() {
   };
 
   // Chat message send
-  const handleSendMessage = (content: string, channelId: "support" | "community" | any) => {
+  const handleSendMessage = (msgOrContent: Omit<ChatMessage, "id" | "timestamp" | "status"> | string, channelId?: any) => {
+    const content = typeof msgOrContent === "string" ? msgOrContent : msgOrContent.content;
+    const channel = typeof msgOrContent === "object" ? msgOrContent.channelId : (channelId || "support");
     const newMsg: ChatMessage = {
       id: "msg-" + Date.now(),
-      channelId: "support",
+      channelId: channel || "support",
       senderId: userProfile.id,
       senderName: userProfile.displayName || "Store Merchant",
       senderAvatar: userProfile.avatarUrl,
@@ -755,20 +791,36 @@ export function App() {
   };
 
   const handleApplyAudit = (
-    auditedItems: Array<{ id: string; name: string; countedQty: number; variance: number }>
+    countsOrAudited: Record<string, number> | Array<{ id: string; name: string; countedQty: number; variance: number }>,
+    auditTitle?: string
   ) => {
     let reconciledCount = 0;
-    auditedItems.forEach((audit) => {
-      if (audit.variance !== 0) {
-        handleSetExactQuantity(
-          audit.id,
-          audit.countedQty,
-          `Audit Reconciliation (Variance: ${audit.variance > 0 ? "+" : ""}${audit.variance})`
-        );
-        reconciledCount++;
-      }
-    });
-    showToast(`Audit complete! Reconciled ${reconciledCount} discrepancies.`);
+    if (Array.isArray(countsOrAudited)) {
+      countsOrAudited.forEach((audit) => {
+        if (audit.variance !== 0) {
+          handleSetExactQuantity(
+            audit.id,
+            audit.countedQty,
+            `Audit Reconciliation: ${auditTitle || "Routine"} (Variance: ${audit.variance > 0 ? "+" : ""}${audit.variance})`
+          );
+          reconciledCount++;
+        }
+      });
+    } else {
+      Object.entries(countsOrAudited).forEach(([itemId, countedQty]) => {
+        const item = items.find((i) => i.id === itemId);
+        if (item && item.quantity !== countedQty) {
+          const variance = countedQty - item.quantity;
+          handleSetExactQuantity(
+            itemId,
+            countedQty,
+            `Audit: ${auditTitle || "Physical Stock Count"} (Variance: ${variance > 0 ? "+" : ""}${variance})`
+          );
+          reconciledCount++;
+        }
+      });
+    }
+    showToast(`Audit complete! Reconciled ${reconciledCount} items.`);
   };
 
   const handleCompleteSale = (
@@ -841,15 +893,19 @@ export function App() {
   };
 
   const handleCompleteRestock = (
-    cart: Array<{ item: InventoryItem; quantity: number; unitCost: number }>
+    deliveries: Array<{ item: InventoryItem; addQuantity?: number; quantity?: number; newCostPrice?: number; unitCost?: number }>
   ) => {
     let totalRestockCost = 0;
-    cart.forEach(({ item, quantity, unitCost }) => {
-      handleUpdateQuantity(item.id, quantity, "Supplier Delivery Restock");
-      if (unitCost !== item.costPrice) {
-        handleUpdateItem({ ...item, costPrice: unitCost });
+    deliveries.forEach(({ item, addQuantity, quantity, newCostPrice, unitCost }) => {
+      const qty = addQuantity ?? quantity ?? 0;
+      const cost = newCostPrice ?? unitCost ?? item.costPrice;
+      if (qty > 0) {
+        handleUpdateQuantity(item.id, qty, "Supplier Delivery Restock");
+        if (cost !== item.costPrice) {
+          handleUpdateItem({ ...item, costPrice: cost });
+        }
+        totalRestockCost += qty * cost;
       }
-      totalRestockCost += quantity * unitCost;
     });
 
     if (totalRestockCost > 0) {
@@ -857,7 +913,7 @@ export function App() {
     }
 
     showToast(
-      `Restocked ${cart.length} items from supplier! Total: ${settings.currencySymbol}${totalRestockCost.toFixed(
+      `Restocked ${deliveries.length} items from supplier! Total: ${settings.currencySymbol}${totalRestockCost.toFixed(
         2
       )}`,
       "success"
@@ -923,12 +979,10 @@ export function App() {
       {showSplash && (
         <SplashScreen
           onEnterApp={handleEnterApp}
-          onOpenAuth={() => {
-            setShowSplash(false);
-            setIsAuthOpen(true);
-          }}
-          onOpenAuthTab={(tab) => {
-            setAuthInitialTab(tab);
+          onOpenAuth={(initialTab) => {
+            if (initialTab) {
+              setAuthInitialTab(initialTab);
+            }
             setShowSplash(false);
             setIsAuthOpen(true);
           }}
@@ -1227,6 +1281,7 @@ export function App() {
         }}
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
+        onShowToast={showToast}
       />
 
       <SubscriptionModal
@@ -1244,25 +1299,19 @@ export function App() {
         paymentRequests={paymentRequests}
         verificationRequests={verificationRequests}
         allUsers={registeredAccounts.map(convertAccountToUserProfile)}
+        onRefreshUsers={async () => {
+          const fresh = await syncUsersWithServer();
+          if (Array.isArray(fresh) && fresh.length > 0) {
+            setRegisteredAccounts(fresh);
+          }
+        }}
         onApprovePayment={handleApprovePayment}
         onRejectPayment={handleRejectPayment}
         onApproveVerification={handleApproveVerification}
         onRejectVerification={handleRejectVerification}
-        onUpdateUserAccount={(userId, updates) => {
-          const accounts = loadRegisteredAccounts().map((a) => {
-            if (a.id === userId) {
-              return {
-                ...a,
-                accountStatus: (updates.accountStatus as any) || a.accountStatus,
-                isVerified:
-                  updates.isVerified !== undefined ? updates.isVerified : a.isVerified,
-                verificationStatus:
-                  (updates.verificationStatus as any) || a.verificationStatus,
-              };
-            }
-            return a;
-          });
-          saveRegisteredAccounts(accounts);
+        onUpdateUserAccount={async (userId, updates) => {
+          await updateUserOnBackend(userId, updates as any);
+          const accounts = loadRegisteredAccounts();
           setRegisteredAccounts(accounts);
           if (currentAccount?.id === userId) {
             const fresh = accounts.find((a) => a.id === userId);
@@ -1273,18 +1322,21 @@ export function App() {
           }
           showToast("User account profile updated by Admin", "success");
         }}
-        onDeleteUserAccount={(userId) => {
-          handleDeleteAccount(userId);
+        onDeleteUserAccount={async (userId) => {
+          await deleteUserOnBackend(userId);
+          const accounts = loadRegisteredAccounts();
+          setRegisteredAccounts(accounts);
           showToast("User account removed by Admin", "info");
         }}
-        onChangeAdminPassword={(newPass) => {
+        onChangeAdminPassword={async (newPass) => {
           localStorage.setItem("inco_admin_master_password", newPass);
-          const accounts = loadRegisteredAccounts().map((a) =>
-            a.emailOrPhone.toLowerCase() === SUPER_ADMIN_EMAIL
-              ? { ...a, passwordHash: newPass }
-              : a
+          const adminAcc = registeredAccounts.find(
+            (a) => a.emailOrPhone.toLowerCase() === SUPER_ADMIN_EMAIL
           );
-          saveRegisteredAccounts(accounts);
+          if (adminAcc) {
+            await updateUserOnBackend(adminAcc.id, { passwordHash: newPass });
+          }
+          const accounts = loadRegisteredAccounts();
           setRegisteredAccounts(accounts);
           showToast("Admin master password successfully changed!", "success");
         }}

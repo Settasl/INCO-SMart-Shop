@@ -26,6 +26,7 @@ import {
   verifyResetToken,
   clearResetToken,
   updateAccountPassword,
+  registerUserOnBackend,
 } from "../lib/userRegistry";
 import { sounds } from "../lib/sound";
 
@@ -89,8 +90,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Submit Sign Up - Instant Direct Registration & Login
-  const handleSignUpSubmit = (e: React.FormEvent) => {
+  // Submit Sign Up - Instant Direct Registration & Sync to Backend
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playClick();
     setErrorMsg(null);
@@ -115,52 +116,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
-      const accounts = loadRegisteredAccounts();
-      const existing = accounts.find((a) => a.emailOrPhone.toLowerCase() === cleanId);
+    try {
+      const isDefaultSuperAdmin = cleanId === SUPER_ADMIN_EMAIL.toLowerCase();
+      const displayName = cleanId.includes("@")
+        ? cleanId.split("@")[0].charAt(0).toUpperCase() + cleanId.split("@")[0].slice(1)
+        : `Merchant ${cleanId.slice(-4)}`;
 
-      if (existing) {
-        setErrorMsg("An account with this email/phone already exists. Please log in.");
+      // Register on server and local storage
+      const result = await registerUserOnBackend({
+        emailOrPhone: cleanId,
+        password: password.trim(),
+        displayName,
+        storeName: "My Store",
+        role: isDefaultSuperAdmin ? "admin" : "merchant",
+      });
+
+      setIsLoading(false);
+
+      if (!result.success || !result.user) {
+        setErrorMsg(result.error || "Could not register account. Please try again.");
         return;
       }
 
-      const isDefaultSuperAdmin = cleanId === SUPER_ADMIN_EMAIL;
-
-      const newAccount: RegisteredAccount = {
-        id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        emailOrPhone: cleanId,
-        passwordHash: password.trim(),
-        displayName: cleanId.includes("@")
-          ? cleanId.split("@")[0].charAt(0).toUpperCase() + cleanId.split("@")[0].slice(1)
-          : `Merchant ${cleanId.slice(-4)}`,
-        storeName: "My Store",
-        role: isDefaultSuperAdmin ? "admin" : "merchant",
-        isVerified: isDefaultSuperAdmin,
-        verificationStatus: isDefaultSuperAdmin ? "approved" : "none",
-        accountStatus: "active",
-        isPro: isDefaultSuperAdmin,
-        avatarUrl:
-          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
-        createdAt: new Date().toISOString(),
-      };
-
-      // Save new user account and activate session immediately
-      const updatedAccounts = [newAccount, ...accounts.filter((a) => a.id !== newAccount.id)];
-      saveRegisteredAccounts(updatedAccounts);
-      setActiveSessionUser(newAccount);
       sounds.playSuccess();
-      onSuccessLogin(newAccount);
+      onSuccessLogin(result.user);
       onClose();
 
       if (onShowToast) {
-        onShowToast(`🎉 Account created! Welcome to INCO Smart Shop, ${newAccount.displayName}!`, "success");
+        onShowToast(`🎉 Account created! Welcome to INCO Smart Shop, ${result.user.displayName}!`, "success");
       }
-    }, 150);
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMsg("An unexpected error occurred during signup.");
+    }
   };
 
-  // Submit Login - Instant Direct Authentication
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Submit Login - Instant Direct Authentication & Server Sync
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playClick();
     setErrorMsg(null);
@@ -177,13 +169,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsLoading(true);
 
+    // Try backend authentication first
+    try {
+      const res = await fetch("/api/users/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailOrPhone: cleanId, password: password.trim() }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setIsLoading(false);
+          setActiveSessionUser(data.user);
+          if (Array.isArray(data.users)) {
+            saveRegisteredAccounts(data.users);
+          }
+          sounds.playSuccess();
+          onSuccessLogin(data.user);
+          onClose();
+
+          if (onShowToast) {
+            onShowToast(`👋 Welcome back, ${data.user.displayName}!`, "success");
+          }
+          return;
+        }
+      } else if (res.status === 401 || res.status === 403 || res.status === 404) {
+        const errData = await res.json().catch(() => ({}));
+        // If server explicitly says invalid password or blocked, show error
+        if (res.status === 401 || res.status === 403) {
+          setIsLoading(false);
+          setErrorMsg(errData.error || "Authentication failed.");
+          return;
+        }
+      }
+    } catch (netErr) {
+      console.warn("[Auth] Backend unreachable during login, trying local offline credentials", netErr);
+    }
+
+    // Offline / local cache fallback authentication
     setTimeout(() => {
       setIsLoading(false);
       const accounts = loadRegisteredAccounts();
       const existing = accounts.find((a) => a.emailOrPhone.toLowerCase() === cleanId);
 
       // Check Master Super Admin
-      if (cleanId === SUPER_ADMIN_EMAIL) {
+      if (cleanId === SUPER_ADMIN_EMAIL.toLowerCase()) {
         const activeAdminPass =
           localStorage.getItem("inco_admin_master_password") || DEFAULT_ADMIN_PASS;
 
@@ -243,7 +274,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (onShowToast) {
         onShowToast(`👋 Welcome back, ${existing.displayName}!`, "success");
       }
-    }, 150);
+    }, 100);
   };
 
   // Submit Forgot Password Request -> Generate Mock Reset Token

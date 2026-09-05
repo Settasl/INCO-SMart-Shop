@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -9,8 +10,203 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Enable CORS and Safari compatibility headers
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Middleware for parsing JSON requests with up to 20mb for base64 photo scans
 app.use(express.json({ limit: "20mb" }));
+
+// --- BACKEND PERSISTENT STORE (IN-MEMORY + DISK BACKED) ---
+export interface BackendAccount {
+  id: string;
+  emailOrPhone: string;
+  passwordHash: string;
+  displayName: string;
+  storeName: string;
+  role: "admin" | "merchant" | "manager" | "cashier";
+  isVerified: boolean;
+  verificationStatus: "none" | "pending" | "approved" | "rejected";
+  accountStatus: "active" | "pending_approval" | "suspended" | "blocked";
+  isPro: boolean;
+  proMonths?: number;
+  proExpiresAt?: string;
+  avatarUrl: string;
+  createdAt: string;
+  lastLoginAt?: string;
+  userAppealReason?: string;
+  suspensionReason?: string;
+  suspensionDate?: string;
+}
+
+export interface TelemetryEvent {
+  id: string;
+  type: "sale" | "restock" | "signup" | "login" | "kyc" | "pro_upgrade" | "admin_action";
+  storeName: string;
+  userIdentifier: string;
+  description: string;
+  amount?: number;
+  timestamp: string;
+}
+
+export interface SystemAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  type: "info" | "warning" | "alert" | "feature";
+  createdAt: string;
+  author: string;
+}
+
+const SUPER_ADMIN_EMAIL = "settaholdings@gmail.com";
+const DEFAULT_ADMIN_PASS = "INCOAdmin@2026!";
+
+const INITIAL_BACKEND_USERS: BackendAccount[] = [
+  {
+    id: "user-super-admin-01",
+    emailOrPhone: SUPER_ADMIN_EMAIL,
+    passwordHash: DEFAULT_ADMIN_PASS,
+    displayName: "INCO Master Admin (Setta SL)",
+    storeName: "INCO Headquarters",
+    role: "admin",
+    isVerified: true,
+    verificationStatus: "approved",
+    accountStatus: "active",
+    isPro: true,
+    proExpiresAt: "2036-01-01T00:00:00.000Z",
+    avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    lastLoginAt: new Date().toISOString(),
+  },
+  {
+    id: "user-demo-merchant-02",
+    emailOrPhone: "merchant@kiosk.com",
+    passwordHash: "password123",
+    displayName: "David Kiosk",
+    storeName: "David Provisions & Mini Mart",
+    role: "merchant",
+    isVerified: false,
+    verificationStatus: "none",
+    accountStatus: "active",
+    isPro: false,
+    avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=140&auto=format&fit=crop&q=80",
+    createdAt: "2026-02-15T00:00:00.000Z",
+    lastLoginAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+];
+
+const INITIAL_TELEMETRY: TelemetryEvent[] = [
+  {
+    id: "telem-init-1",
+    type: "signup",
+    storeName: "David Provisions & Mini Mart",
+    userIdentifier: "merchant@kiosk.com",
+    description: "New merchant registered account from Freetown",
+    timestamp: new Date(Date.now() - 7200000).toISOString(),
+  },
+  {
+    id: "telem-init-2",
+    type: "sale",
+    storeName: "David Provisions & Mini Mart",
+    userIdentifier: "merchant@kiosk.com",
+    description: "POS sale completed: 4 items ($28.50)",
+    amount: 28.5,
+    timestamp: new Date(Date.now() - 3600000).toISOString(),
+  },
+  {
+    id: "telem-init-3",
+    type: "login",
+    storeName: "INCO Headquarters",
+    userIdentifier: SUPER_ADMIN_EMAIL,
+    description: "Super Admin session active on Command Console",
+    timestamp: new Date().toISOString(),
+  },
+];
+
+const INITIAL_ANNOUNCEMENTS: SystemAnnouncement[] = [
+  {
+    id: "ann-01",
+    title: "INCO v3.2 Core Upgrade Active",
+    message: "Real-time client-to-backend user synchronization, Glass Silk aesthetic, and Safari WebKit optimizations deployed.",
+    type: "feature",
+    createdAt: new Date().toISOString(),
+    author: "System Super Admin",
+  },
+];
+
+// File-based persistence setup
+const DATA_DIR = path.join(process.cwd(), "data");
+const DB_FILE = path.join(DATA_DIR, "inco_database.json");
+
+interface DatabaseSchema {
+  users: BackendAccount[];
+  telemetry: TelemetryEvent[];
+  announcements: SystemAnnouncement[];
+  lastUpdated: string;
+}
+
+let dbState: DatabaseSchema = {
+  users: INITIAL_BACKEND_USERS,
+  telemetry: INITIAL_TELEMETRY,
+  announcements: INITIAL_ANNOUNCEMENTS,
+  lastUpdated: new Date().toISOString(),
+};
+
+// Load database from file on start
+function initDatabase() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.users)) {
+        // Ensure super admin is in DB
+        const hasAdmin = parsed.users.some(
+          (u: BackendAccount) => u.emailOrPhone.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+        );
+        if (!hasAdmin) {
+          parsed.users.unshift(INITIAL_BACKEND_USERS[0]);
+        }
+        dbState = {
+          users: parsed.users,
+          telemetry: Array.isArray(parsed.telemetry) ? parsed.telemetry : INITIAL_TELEMETRY,
+          announcements: Array.isArray(parsed.announcements) ? parsed.announcements : INITIAL_ANNOUNCEMENTS,
+          lastUpdated: parsed.lastUpdated || new Date().toISOString(),
+        };
+        console.log(`[Database] Loaded ${dbState.users.length} registered users from ${DB_FILE}`);
+        return;
+      }
+    }
+    // If file doesn't exist, write defaults
+    saveDatabase();
+  } catch (err) {
+    console.error("[Database] Error loading database file:", err);
+  }
+}
+
+function saveDatabase() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    dbState.lastUpdated = new Date().toISOString();
+    fs.writeFileSync(DB_FILE, JSON.stringify(dbState, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[Database] Error saving database file:", err);
+  }
+}
+
+// Initialize immediately
+initDatabase();
 
 // Initialize Google GenAI client (lazy/safely checked per request)
 function getGenAI() {
@@ -32,7 +228,361 @@ function getGenAI() {
 
 // Health Check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", app: "Inco Inventory Counter" });
+  res.json({
+    status: "ok",
+    app: "Inco Inventory Counter",
+    usersCount: dbState.users.length,
+    lastUpdated: dbState.lastUpdated,
+  });
+});
+
+// --- USER MANAGEMENT & SYNC ENDPOINTS ---
+
+// Get all registered users from backend
+app.get("/api/users", (req, res) => {
+  res.json({
+    success: true,
+    users: dbState.users,
+    count: dbState.users.length,
+    lastUpdated: dbState.lastUpdated,
+  });
+});
+
+// Register new user on backend directly
+app.post("/api/users/signup", (req, res) => {
+  try {
+    const { emailOrPhone, password, displayName, storeName, role = "merchant" } = req.body;
+    if (!emailOrPhone || typeof emailOrPhone !== "string") {
+      return res.status(400).json({ error: "Email or phone number is required." });
+    }
+    if (!password || password.length < 4) {
+      return res.status(400).json({ error: "Password must be at least 4 characters long." });
+    }
+
+    const cleanId = emailOrPhone.trim().toLowerCase();
+    const existing = dbState.users.find(
+      (u) => u.emailOrPhone.toLowerCase() === cleanId
+    );
+
+    if (existing) {
+      return res.status(409).json({
+        error: "An account with this email/phone already exists. Please sign in.",
+        user: existing,
+      });
+    }
+
+    const isDefaultAdmin = cleanId === SUPER_ADMIN_EMAIL.toLowerCase();
+
+    const newUser: BackendAccount = {
+      id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      emailOrPhone: cleanId,
+      passwordHash: password.trim(),
+      displayName: displayName?.trim() || (cleanId.includes("@")
+        ? cleanId.split("@")[0].charAt(0).toUpperCase() + cleanId.split("@")[0].slice(1)
+        : `Merchant ${cleanId.slice(-4)}`),
+      storeName: storeName?.trim() || "My Store",
+      role: isDefaultAdmin ? "admin" : (role as any),
+      isVerified: isDefaultAdmin,
+      verificationStatus: isDefaultAdmin ? "approved" : "none",
+      accountStatus: "active",
+      isPro: isDefaultAdmin,
+      avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+    };
+
+    dbState.users.unshift(newUser);
+
+    // Record telemetry event
+    const telemEvent: TelemetryEvent = {
+      id: `telem-${Date.now()}`,
+      type: "signup",
+      storeName: newUser.storeName,
+      userIdentifier: newUser.emailOrPhone,
+      description: `New merchant registered: ${newUser.displayName} (${newUser.storeName})`,
+      timestamp: new Date().toISOString(),
+    };
+    dbState.telemetry.unshift(telemEvent);
+    if (dbState.telemetry.length > 100) dbState.telemetry = dbState.telemetry.slice(0, 100);
+
+    saveDatabase();
+
+    console.log(`[Database] Registered new user: ${newUser.emailOrPhone} (${newUser.displayName}). Total users: ${dbState.users.length}`);
+
+    res.status(201).json({
+      success: true,
+      user: newUser,
+      users: dbState.users,
+    });
+  } catch (error: any) {
+    console.error("Error in /api/users/signup:", error);
+    res.status(500).json({ error: error.message || "Failed to register user." });
+  }
+});
+
+// Login user and record login timestamp
+app.post("/api/users/login", (req, res) => {
+  try {
+    const { emailOrPhone, password } = req.body;
+    if (!emailOrPhone || !password) {
+      return res.status(400).json({ error: "Identifier and password are required." });
+    }
+
+    const cleanId = emailOrPhone.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    const userIndex = dbState.users.findIndex(
+      (u) => u.emailOrPhone.toLowerCase() === cleanId
+    );
+
+    if (userIndex === -1) {
+      return res.status(404).json({ error: "Account not found. Please sign up." });
+    }
+
+    const user = dbState.users[userIndex];
+    if (user.passwordHash !== cleanPass) {
+      return res.status(401).json({ error: "Invalid password. Please try again." });
+    }
+
+    if (user.accountStatus === "suspended" || user.accountStatus === "blocked") {
+      return res.status(403).json({
+        error: `Account is currently ${user.accountStatus}. Please contact support or submit an appeal.`,
+        accountStatus: user.accountStatus,
+        user,
+      });
+    }
+
+    // Update lastLoginAt
+    dbState.users[userIndex].lastLoginAt = new Date().toISOString();
+
+    // Log telemetry
+    const telem: TelemetryEvent = {
+      id: `telem-${Date.now()}`,
+      type: "login",
+      storeName: user.storeName,
+      userIdentifier: user.emailOrPhone,
+      description: `${user.displayName} logged into store terminal`,
+      timestamp: new Date().toISOString(),
+    };
+    dbState.telemetry.unshift(telem);
+    if (dbState.telemetry.length > 100) dbState.telemetry = dbState.telemetry.slice(0, 100);
+
+    saveDatabase();
+
+    res.json({
+      success: true,
+      user: dbState.users[userIndex],
+      users: dbState.users,
+    });
+  } catch (error: any) {
+    console.error("Error in /api/users/login:", error);
+    res.status(500).json({ error: error.message || "Login failed." });
+  }
+});
+
+// Bidirectional sync endpoint: clients send local accounts, server merges and returns unified list
+app.post("/api/users/sync", (req, res) => {
+  try {
+    const { clientUsers } = req.body;
+    let didUpdate = false;
+
+    if (Array.isArray(clientUsers) && clientUsers.length > 0) {
+      clientUsers.forEach((clientUser: BackendAccount) => {
+        if (!clientUser.emailOrPhone) return;
+        const cleanId = clientUser.emailOrPhone.trim().toLowerCase();
+        const existingIdx = dbState.users.findIndex(
+          (u) => u.emailOrPhone.toLowerCase() === cleanId || u.id === clientUser.id
+        );
+
+        if (existingIdx === -1) {
+          // New user from client that server doesn't have yet!
+          dbState.users.push(clientUser);
+          didUpdate = true;
+          console.log(`[Sync] Discovered new client user synced to server: ${clientUser.emailOrPhone}`);
+        } else {
+          // Update existing user with any updated status or profile fields
+          const existing = dbState.users[existingIdx];
+          // Keep server's verified/pro status if already set, or adopt client's if newer
+          const merged: BackendAccount = {
+            ...existing,
+            ...clientUser,
+            // Keep admin role for super admin
+            role: cleanId === SUPER_ADMIN_EMAIL.toLowerCase() ? "admin" : (clientUser.role || existing.role),
+            isVerified: existing.isVerified || clientUser.isVerified,
+            isPro: existing.isPro || clientUser.isPro,
+          };
+          dbState.users[existingIdx] = merged;
+        }
+      });
+    }
+
+    if (didUpdate) {
+      saveDatabase();
+    }
+
+    res.json({
+      success: true,
+      users: dbState.users,
+      count: dbState.users.length,
+      lastUpdated: dbState.lastUpdated,
+    });
+  } catch (error: any) {
+    console.error("Error in /api/users/sync:", error);
+    res.status(500).json({ error: error.message || "Sync failed." });
+  }
+});
+
+// Update specific user (Admin actions: KYC approval, Pro tier, status changes)
+app.put("/api/users/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const idx = dbState.users.findIndex((u) => u.id === id || u.emailOrPhone.toLowerCase() === id.toLowerCase());
+    if (idx === -1) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const oldUser = dbState.users[idx];
+    const updatedUser: BackendAccount = {
+      ...oldUser,
+      ...updates,
+      // Protect super admin role
+      role: oldUser.emailOrPhone.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? "admin" : (updates.role || oldUser.role),
+    };
+
+    dbState.users[idx] = updatedUser;
+
+    // Log admin action telemetry
+    const telem: TelemetryEvent = {
+      id: `telem-${Date.now()}`,
+      type: "admin_action",
+      storeName: updatedUser.storeName,
+      userIdentifier: updatedUser.emailOrPhone,
+      description: `Account updated: Status=${updatedUser.accountStatus}, Verified=${updatedUser.isVerified}, Pro=${updatedUser.isPro}`,
+      timestamp: new Date().toISOString(),
+    };
+    dbState.telemetry.unshift(telem);
+    if (dbState.telemetry.length > 100) dbState.telemetry = dbState.telemetry.slice(0, 100);
+
+    saveDatabase();
+
+    res.json({
+      success: true,
+      user: updatedUser,
+      users: dbState.users,
+    });
+  } catch (error: any) {
+    console.error("Error in PUT /api/users/:id:", error);
+    res.status(500).json({ error: error.message || "Failed to update user." });
+  }
+});
+
+// Delete user (Admin action)
+app.delete("/api/users/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = dbState.users.find((u) => u.id === id || u.emailOrPhone.toLowerCase() === id.toLowerCase());
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    if (user.emailOrPhone.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+      return res.status(403).json({ error: "Cannot delete the Super Admin root account." });
+    }
+
+    dbState.users = dbState.users.filter((u) => u.id !== user.id && u.emailOrPhone.toLowerCase() !== user.emailOrPhone.toLowerCase());
+    saveDatabase();
+
+    res.json({
+      success: true,
+      message: `User ${user.emailOrPhone} deleted.`,
+      users: dbState.users,
+    });
+  } catch (error: any) {
+    console.error("Error in DELETE /api/users/:id:", error);
+    res.status(500).json({ error: error.message || "Failed to delete user." });
+  }
+});
+
+// Telemetry events
+app.get("/api/telemetry", (req, res) => {
+  res.json({
+    success: true,
+    telemetry: dbState.telemetry,
+  });
+});
+
+app.post("/api/telemetry", (req, res) => {
+  try {
+    const { type, storeName, userIdentifier, description, amount } = req.body;
+    if (!type || !description) {
+      return res.status(400).json({ error: "Type and description are required." });
+    }
+
+    const event: TelemetryEvent = {
+      id: `telem-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type,
+      storeName: storeName || "Merchant Store",
+      userIdentifier: userIdentifier || "anonymous",
+      description,
+      amount: typeof amount === "number" ? amount : undefined,
+      timestamp: new Date().toISOString(),
+    };
+
+    dbState.telemetry.unshift(event);
+    if (dbState.telemetry.length > 100) dbState.telemetry = dbState.telemetry.slice(0, 100);
+    saveDatabase();
+
+    res.status(201).json({ success: true, event });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Announcements
+app.get("/api/announcements", (req, res) => {
+  res.json({
+    success: true,
+    announcements: dbState.announcements,
+  });
+});
+
+app.post("/api/announcements", (req, res) => {
+  try {
+    const { title, message, type = "info", author = "INCO Admin" } = req.body;
+    if (!title || !message) {
+      return res.status(400).json({ error: "Title and message are required." });
+    }
+
+    const ann: SystemAnnouncement = {
+      id: `ann-${Date.now()}`,
+      title,
+      message,
+      type,
+      author,
+      createdAt: new Date().toISOString(),
+    };
+
+    dbState.announcements.unshift(ann);
+    saveDatabase();
+
+    res.status(201).json({ success: true, announcement: ann });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Full state sync snapshot
+app.get("/api/sync", (req, res) => {
+  res.json({
+    success: true,
+    users: dbState.users,
+    telemetry: dbState.telemetry,
+    announcements: dbState.announcements,
+    serverTime: new Date().toISOString(),
+    totalUsersCount: dbState.users.length,
+  });
 });
 
 // AI Voice / Verbal Text Stock Assistant
