@@ -19,6 +19,7 @@ import {
 import { StoreSettings, UserProfile } from "../types";
 import { BrandLogo } from "./BrandLogo";
 import { sounds } from "../lib/sound";
+import { useBusiness } from "../context/BusinessContext";
 
 interface HeaderProps {
   activeView: string;
@@ -55,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDarkMode,
   darkMode = false,
 }) => {
+  const { activeBusiness, userRole } = useBusiness();
   const isSuperAdmin =
     (userProfile?.identifier || userPhoneOrEmail || "").toLowerCase() ===
     "settaholdings@gmail.com";
@@ -104,9 +106,14 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded-md">
                   Smart Shop
                 </span>
+                {userRole && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-800 border border-slate-700 px-1 py-0.5 rounded-md">
+                    {userRole}
+                  </span>
+                )}
               </div>
               <span className="text-[10px] text-slate-400 font-medium truncate max-w-[140px] sm:max-w-none">
-                {settings.storeName || "My Retail Store"}
+                {activeBusiness?.businessName || activeBusiness?.name || settings.storeName || "My Retail Store"}
               </span>
             </div>
           </div>

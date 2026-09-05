@@ -60,7 +60,14 @@ import {
 import {
   syncItemsToFirestore,
   saveSaleToFirestore,
+  saveItemToBusinessFirestore,
+  deleteItemFromBusinessFirestore,
+  subscribeToTenantItems,
+  syncItemsToBusinessFirestore,
 } from "./lib/firebase";
+import { useAuth } from "./context/AuthContext";
+import { useBusiness } from "./context/BusinessContext";
+import { recordAuditLog } from "./lib/auditService";
 
 const DEFAULT_SETTINGS: StoreSettings = {
   storeName: "INCO Smart Shop",
@@ -151,6 +158,9 @@ const INITIAL_VERIFICATION_REQUESTS: VerificationRequest[] = [
 ];
 
 export function App() {
+  const { user: fbUser, signOut: fbSignOut } = useAuth();
+  const { activeBusinessId, activeBusiness, userRole, canEdit, canAdmin } = useBusiness();
+
   // Navigation & Page State ("stock" | "valuation" | "reports" | "suppliers" | "tools")
   const [activeView, setActiveView] = useState<string>("stock");
   const [showSplash, setShowSplash] = useState<boolean>(() => {
@@ -169,6 +179,35 @@ export function App() {
   });
   const [authInitialTab, setAuthInitialTab] = useState<"login" | "signup">("login");
   const [saleSuccessInfo, setSaleSuccessInfo] = useState<SaleSuccessInfo | null>(null);
+
+  // Sync Firebase Auth user with active session state
+  useEffect(() => {
+    if (fbUser) {
+      const email = fbUser.email || "merchant@inco.app";
+      const isSuperAdmin = email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+      const account: RegisteredAccount = {
+        id: fbUser.uid,
+        emailOrPhone: email,
+        passwordHash: "[PROTECTED_BY_FIREBASE]",
+        displayName: fbUser.displayName || email.split("@")[0] || "Store Merchant",
+        storeName: activeBusiness?.businessName || activeBusiness?.name || "My Store",
+        role: isSuperAdmin ? "admin" : (userRole as any) || "merchant",
+        isVerified: true,
+        verificationStatus: "approved",
+        accountStatus: "active",
+        isPro: isSuperAdmin,
+        avatarUrl:
+          fbUser.photoURL ||
+          (isSuperAdmin
+            ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80"
+            : "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=140&auto=format&fit=crop&q=80"),
+        createdAt: new Date().toISOString(),
+      };
+      setCurrentAccount(account);
+      setActiveSessionUser(account);
+      setIsAuthOpen(false);
+    }
+  }, [fbUser, activeBusiness, userRole]);
 
   // Convert active account to userProfile
   const userProfile: UserProfile = useMemo(() => {
@@ -272,13 +311,28 @@ export function App() {
     setTimeout(() => setToast(null), 3200);
   };
 
-  // Sync to localStorage
+  // Realtime subscription to tenant items in Firestore
+  useEffect(() => {
+    if (!activeBusinessId) return;
+    const unsubscribe = subscribeToTenantItems(activeBusinessId, (remoteItems) => {
+      if (remoteItems && remoteItems.length > 0) {
+        setItems(remoteItems);
+      } else if (items.length > 0) {
+        syncItemsToBusinessFirestore(activeBusinessId, items).catch(() => {});
+      }
+    });
+    return () => unsubscribe();
+  }, [activeBusinessId]);
+
+  // Sync to local cache and fallback Firestore
   useEffect(() => {
     localStorage.setItem("inco_inventory_items", JSON.stringify(items));
-    if (userPhoneOrEmail) {
+    if (activeBusinessId) {
+      syncItemsToBusinessFirestore(activeBusinessId, items).catch(() => {});
+    } else if (userPhoneOrEmail) {
       syncItemsToFirestore(userPhoneOrEmail, items);
     }
-  }, [items, userPhoneOrEmail]);
+  }, [items, activeBusinessId, userPhoneOrEmail]);
 
   useEffect(() => {
     localStorage.setItem("inco_stock_movements", JSON.stringify(movements));
@@ -372,7 +426,10 @@ export function App() {
   };
 
   // Logout handler
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fbSignOut();
+    } catch (e) {}
     setActiveSessionUser(null);
     setCurrentAccount(null);
     setIsAuthOpen(true);
@@ -704,17 +761,55 @@ export function App() {
       newItem.quantity,
       "New item created"
     );
+
+    if (activeBusinessId) {
+      saveItemToBusinessFirestore(activeBusinessId, newItem).catch(() => {});
+      recordAuditLog({
+        businessId: activeBusinessId,
+        userId: fbUser?.uid || "user",
+        userEmail: fbUser?.email || "user",
+        action: "ITEM_CREATED",
+        entityType: "item",
+        entityId: newItem.id,
+        newData: newItem,
+      }).catch(() => {});
+    }
+
     showToast(`Added "${newItem.name}" to inventory!`);
   };
 
   const handleUpdateItem = (updatedItem: InventoryItem) => {
     setItems((prev) => prev.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+    if (activeBusinessId) {
+      saveItemToBusinessFirestore(activeBusinessId, updatedItem).catch(() => {});
+      recordAuditLog({
+        businessId: activeBusinessId,
+        userId: fbUser?.uid || "user",
+        userEmail: fbUser?.email || "user",
+        action: "ITEM_UPDATED",
+        entityType: "item",
+        entityId: updatedItem.id,
+        newData: updatedItem,
+      }).catch(() => {});
+    }
     showToast(`Updated "${updatedItem.name}"`);
   };
 
   const handleDeleteItem = (id: string) => {
     const target = items.find((i) => i.id === id);
     setItems((prev) => prev.filter((item) => item.id !== id));
+    if (activeBusinessId) {
+      deleteItemFromBusinessFirestore(activeBusinessId, id).catch(() => {});
+      recordAuditLog({
+        businessId: activeBusinessId,
+        userId: fbUser?.uid || "user",
+        userEmail: fbUser?.email || "user",
+        action: "ITEM_DELETED",
+        entityType: "item",
+        entityId: id,
+        previousData: target,
+      }).catch(() => {});
+    }
     if (target) showToast(`Deleted "${target.name}"`);
   };
 
@@ -839,6 +934,23 @@ export function App() {
     const cashCollected = paymentDetails?.amountPaid ?? totalAmount;
     if (cashCollected > 0) {
       setCashAtHand((prev) => prev + cashCollected);
+    }
+
+    if (activeBusinessId) {
+      recordAuditLog({
+        businessId: activeBusinessId,
+        userId: fbUser?.uid || "user",
+        userEmail: fbUser?.email || "user",
+        action: "SALE",
+        entityType: "sale",
+        entityId: "sale-" + Date.now(),
+        newData: {
+          totalAmount,
+          cashCollected,
+          customerName: paymentDetails?.customerName || "Walk-in",
+          itemCount: cart.length,
+        },
+      }).catch(() => {});
     }
 
     if (userPhoneOrEmail) {

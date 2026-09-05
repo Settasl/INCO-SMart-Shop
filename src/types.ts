@@ -142,12 +142,80 @@ export interface DetectedAIPhotoItem {
   notes?: string;
 }
 
+export type BusinessRole =
+  | "owner"
+  | "admin"
+  | "manager"
+  | "cashier"
+  | "inventory_manager"
+  | "accountant"
+  | "staff"
+  | "auditor"
+  | "super_admin";
+
+export type BusinessType =
+  | "shop"
+  | "pharmacy"
+  | "boutique"
+  | "kiosk"
+  | "mini_mart"
+  | "supermarket"
+  | "electronics"
+  | "other";
+
+export interface Business {
+  businessId: string;
+  businessName: string;
+  name?: string; // Convenient alias for businessName
+  businessType: BusinessType;
+  ownerId: string;
+  country?: string;
+  currency: string;
+  timezone?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logo?: string;
+  status: "active" | "suspended" | "archived";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BusinessMember {
+  uid: string;
+  businessId: string;
+  role: BusinessRole;
+  status: "active" | "invited" | "suspended" | "revoked";
+  email?: string;
+  displayName?: string;
+  permissions?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Product {
+  productId: string;
+  businessId: string;
+  name: string;
+  category: Category;
+  unit: Unit;
+  costPrice: number;
+  sellingPrice: number;
+  barcode?: string;
+  sku?: string;
+  reorderPoint?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UserProfile {
-  id: string;
+  id: string; // Firebase Auth UID
+  uid?: string; // Explicit alias for Firebase UID
   identifier: string; // phone or email
   displayName: string;
   avatarUrl: string;
-  role: "admin" | "owner" | "manager" | "cashier" | "user";
+  activeBusinessId?: string;
+  role: "admin" | "owner" | "manager" | "cashier" | "user" | BusinessRole;
   isVerified: boolean;
   verificationStatus: "none" | "pending" | "approved" | "rejected";
   accountStatus?: "active" | "pending_approval" | "suspended" | "blocked" | "rejected";

@@ -2,24 +2,97 @@
   "entities": {
     "User": {
       "title": "User Profile",
-      "description": "User profile with login phone or email",
+      "description": "User profile associated with a Firebase Auth UID",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "maxLength": 128 },
         "email": { "type": "string", "maxLength": 256 },
-        "phone": { "type": "string", "maxLength": 32 },
         "displayName": { "type": "string", "maxLength": 128 },
-        "createdAt": { "type": "string", "maxLength": 64 }
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "activeBusinessId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
       },
-      "required": ["uid", "createdAt"]
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Business": {
+      "title": "Business Organization",
+      "description": "Tenant organization representing a shop, kiosk, or enterprise",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "businessName": { "type": "string", "maxLength": 128 },
+        "businessType": {
+          "type": "string",
+          "enum": ["shop", "pharmacy", "boutique", "kiosk", "mini_mart", "supermarket", "electronics", "other"]
+        },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "country": { "type": "string", "maxLength": 64 },
+        "currency": { "type": "string", "maxLength": 16 },
+        "timezone": { "type": "string", "maxLength": 64 },
+        "address": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "email": { "type": "string", "maxLength": 256 },
+        "logo": { "type": "string", "maxLength": 512 },
+        "status": {
+          "type": "string",
+          "enum": ["active", "suspended", "archived"]
+        },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["businessId", "businessName", "ownerId", "currency", "createdAt"]
+    },
+    "BusinessMember": {
+      "title": "Business Member",
+      "description": "Membership mapping linking a user UID to a business with RBAC",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "role": {
+          "type": "string",
+          "enum": ["owner", "manager", "cashier", "inventory_manager", "accountant", "staff", "auditor", "super_admin"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "invited", "suspended", "revoked"]
+        },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "businessId", "role", "status", "createdAt"]
+    },
+    "Product": {
+      "title": "Product Catalog Item",
+      "description": "Master product catalog definitions for a business tenant",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "unit": { "type": "string", "maxLength": 32 },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "barcode": { "type": "string", "maxLength": 64 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "reorderPoint": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["productId", "businessId", "name", "category", "unit", "sellingPrice"]
     },
     "InventoryItem": {
       "title": "Inventory Item",
-      "description": "Stock item details in inventory counter",
+      "description": "Stock inventory levels and tracking details within a business",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
-        "userId": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 128 },
         "category": { "type": "string", "maxLength": 64 },
         "quantity": { "type": "number" },
@@ -29,60 +102,137 @@
         "sellingPrice": { "type": "number" },
         "barcode": { "type": "string", "maxLength": 64 },
         "sku": { "type": "string", "maxLength": 64 },
-        "lastCountedAt": { "type": "string", "maxLength": 64 },
+        "location": { "type": "string", "maxLength": 128 },
         "notes": { "type": "string", "maxLength": 512 },
-        "location": { "type": "string", "maxLength": 128 }
+        "lastCountedAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
       },
-      "required": ["id", "userId", "name", "category", "quantity", "unit"]
+      "required": ["id", "businessId", "name", "category", "quantity", "unit"]
     },
     "StockMovement": {
       "title": "Stock Movement",
-      "description": "Audit and history movement log",
+      "description": "Immutable ledger record for inventory changes, sales, and restocks",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
-        "userId": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
         "itemId": { "type": "string", "maxLength": 128 },
         "itemName": { "type": "string", "maxLength": 128 },
         "type": { "type": "string", "maxLength": 32 },
         "delta": { "type": "number" },
         "newQuantity": { "type": "number" },
-        "timestamp": { "type": "string", "maxLength": 64 },
-        "note": { "type": "string", "maxLength": 256 }
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "note": { "type": "string", "maxLength": 256 },
+        "timestamp": { "type": "string", "maxLength": 64 }
       },
-      "required": ["id", "userId", "itemId", "itemName", "type", "delta", "timestamp"]
+      "required": ["id", "businessId", "itemId", "itemName", "type", "delta", "timestamp"]
     },
     "SaleRecord": {
-      "title": "Sale Record",
-      "description": "Completed quick sale transaction",
+      "title": "Sale Transaction Record",
+      "description": "Completed point of sale or credit sales transaction",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
-        "userId": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "cashierUid": { "type": "string", "maxLength": 128 },
         "totalAmount": { "type": "number" },
         "totalUnits": { "type": "number" },
-        "timestamp": { "type": "string", "maxLength": 64 },
-        "items": { "type": "array" }
+        "paymentMethod": { "type": "string", "maxLength": 64 },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["paid", "partial", "unpaid"]
+        },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "items": { "type": "array" },
+        "timestamp": { "type": "string", "maxLength": 64 }
       },
-      "required": ["id", "userId", "totalAmount", "timestamp"]
+      "required": ["id", "businessId", "totalAmount", "totalUnits", "timestamp"]
+    },
+    "Customer": {
+      "title": "Customer Record",
+      "description": "Customer contact and credit ledger record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "amountOutstanding": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "businessId", "customerName"]
+    },
+    "AuditLog": {
+      "title": "Audit Log Record",
+      "description": "Immutable security and operational event audit record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 64 },
+        "entityType": { "type": "string", "maxLength": 64 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 512 },
+        "timestamp": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "businessId", "actorUid", "action", "timestamp"]
+    },
+    "AdminRecord": {
+      "title": "System Administrator",
+      "description": "Platform super administrator authorization record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "role": { "type": "string", "maxLength": 32 },
+        "grantedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email", "role"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
-      "description": "User profile"
+      "description": "User profile indexed by Firebase UID"
     },
-    "/inventory/{itemId}": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "System super-admin authorization whitelist"
+    },
+    "/businesses/{businessId}": {
+      "schema": { "$ref": "#/entities/Business" },
+      "description": "Tenant business organization profile"
+    },
+    "/businesses/{businessId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/BusinessMember" },
+      "description": "Members and roles for this business tenant"
+    },
+    "/businesses/{businessId}/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Master catalog products for this business tenant"
+    },
+    "/businesses/{businessId}/inventory/{inventoryId}": {
       "schema": { "$ref": "#/entities/InventoryItem" },
-      "description": "Inventory items owned by user"
+      "description": "Inventory stock items for this business tenant"
     },
-    "/movements/{movementId}": {
+    "/businesses/{businessId}/stockMovements/{movementId}": {
       "schema": { "$ref": "#/entities/StockMovement" },
-      "description": "Stock movements"
+      "description": "Immutable stock movement ledger for this business tenant"
     },
-    "/sales/{saleId}": {
+    "/businesses/{businessId}/sales/{saleId}": {
       "schema": { "$ref": "#/entities/SaleRecord" },
-      "description": "Sales records"
+      "description": "Sales records for this business tenant"
+    },
+    "/businesses/{businessId}/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Customer and credit records for this business tenant"
+    },
+    "/businesses/{businessId}/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable operational and security audit log"
     }
   }
 }

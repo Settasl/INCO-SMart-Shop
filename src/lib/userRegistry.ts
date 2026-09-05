@@ -18,13 +18,13 @@ export interface RegisteredAccount {
 }
 
 export const SUPER_ADMIN_EMAIL = "settaholdings@gmail.com";
-export const DEFAULT_ADMIN_PASS = "INCOAdmin@2026!";
+export const DEFAULT_ADMIN_PASS = "";
 
 export const DEFAULT_ACCOUNTS: RegisteredAccount[] = [
   {
     id: "user-super-admin-01",
     emailOrPhone: SUPER_ADMIN_EMAIL,
-    passwordHash: DEFAULT_ADMIN_PASS,
+    passwordHash: "[PROTECTED_BY_FIREBASE]",
     displayName: "INCO Master Admin (Setta SL)",
     storeName: "INCO Headquarters",
     role: "admin",
@@ -39,7 +39,7 @@ export const DEFAULT_ACCOUNTS: RegisteredAccount[] = [
   {
     id: "user-demo-merchant-02",
     emailOrPhone: "merchant@kiosk.com",
-    passwordHash: "password123",
+    passwordHash: "[PROTECTED_BY_FIREBASE]",
     displayName: "David Kiosk",
     storeName: "David Provisions & Mini Mart",
     role: "merchant",
