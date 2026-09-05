@@ -43,8 +43,6 @@ export const SalesReportModal: React.FC<SalesReportModalProps> = ({
   const [isDriveUploading, setIsDriveUploading] = useState(false);
   const [driveResult, setDriveResult] = useState<{ url?: string; msg?: string; error?: string } | null>(null);
 
-  if (!isOpen) return null;
-
   // Filter movements by period
   const filteredMovements = useMemo(() => {
     const now = new Date();
@@ -121,6 +119,8 @@ export const SalesReportModal: React.FC<SalesReportModalProps> = ({
       return s.item.quantity <= s.item.reorderPoint;
     });
   }, [salesByItem]);
+
+  if (!isOpen) return null;
 
   // Generate CSV data string
   const generateCSVContent = () => {

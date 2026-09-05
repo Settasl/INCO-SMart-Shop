@@ -46,39 +46,67 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsLoading(true);
     setError(null);
 
+    // 1. Check offline local business cache first for instantaneous startup
+    const cachedBizId = localStorage.getItem("inco_active_business_id");
+    const cachedBizJson = localStorage.getItem("inco_cached_business_data");
+    if (cachedBizJson) {
+      try {
+        const cachedBiz = JSON.parse(cachedBizJson) as Business;
+        if (cachedBiz && cachedBiz.businessId) {
+          setCurrentBusiness(cachedBiz);
+          setMembership({
+            uid: user.uid,
+            businessId: cachedBiz.businessId,
+            email: user.email || "",
+            role: "owner",
+            status: "active",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      } catch {
+        // Corrupt cache, continue
+      }
+    }
+
     try {
-      // 1. Check user profile for activeBusinessId
-      const userDoc = await getDoc(doc(db, "users", user.uid));
+      // 2. Check user profile for activeBusinessId
       let targetBusinessId: string | null = null;
-      if (userDoc.exists() && userDoc.data().activeBusinessId) {
-        targetBusinessId = userDoc.data().activeBusinessId;
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists() && userDoc.data().activeBusinessId) {
+          targetBusinessId = userDoc.data().activeBusinessId;
+        }
+      } catch (err: unknown) {
+        console.warn("[BusinessContext] User profile offline or pending sync:", err);
       }
 
-      // 2. If activeBusinessId exists, try to load it
+      // 3. If activeBusinessId exists, try to load it
       if (targetBusinessId) {
         const { business, member } = await getTenantBusiness(targetBusinessId, user.uid);
         if (business && member) {
           setCurrentBusiness(business);
           setMembership(member);
+          localStorage.setItem("inco_active_business_id", business.businessId);
+          localStorage.setItem("inco_cached_business_data", JSON.stringify(business));
           setIsLoading(false);
           return;
         }
       }
 
-      // 3. Fallback: check localStorage for last selected business
-      const cachedBizId = localStorage.getItem("inco_active_business_id");
+      // 4. Fallback: check localStorage for last selected business
       if (cachedBizId) {
         const { business, member } = await getTenantBusiness(cachedBizId, user.uid);
         if (business && member) {
           setCurrentBusiness(business);
           setMembership(member);
+          localStorage.setItem("inco_cached_business_data", JSON.stringify(business));
           setIsLoading(false);
           return;
         }
       }
 
-      // 4. Fallback: auto-provision a default business for the user if they don't have one yet
-      // This ensures seamless onboarding without crashing the app
+      // 5. Auto-provision a default business for the user if they don't have one yet
       const defaultName = `${user.displayName || "My"} Store`;
       const { business, member } = await createTenantBusiness(user.uid, {
         businessName: defaultName,
@@ -87,12 +115,36 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
 
       localStorage.setItem("inco_active_business_id", business.businessId);
+      localStorage.setItem("inco_cached_business_data", JSON.stringify(business));
       setCurrentBusiness(business);
       setMembership(member);
     } catch (err: unknown) {
-      console.error("[BusinessContext] Error resolving business:", err);
-      const msg = err instanceof Error ? err.message : "Failed to load business workspace";
-      setError(msg);
+      console.warn("[BusinessContext] Running in offline business mode:", err);
+      // Construct an offline resilient workspace so user is never blocked
+      const fallbackBizId = cachedBizId || `biz_${user.uid.slice(0, 8)}`;
+      const offlineBiz: Business = {
+        businessId: fallbackBizId,
+        businessName: user.displayName ? `${user.displayName}'s Store` : "INCO Smart Shop",
+        businessType: "shop",
+        ownerId: user.uid,
+        status: "active",
+        currency: "LRD",
+        country: "Liberia",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setCurrentBusiness(offlineBiz);
+      setMembership({
+        uid: user.uid,
+        businessId: fallbackBizId,
+        email: user.email || "",
+        role: "owner",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      localStorage.setItem("inco_active_business_id", fallbackBizId);
+      localStorage.setItem("inco_cached_business_data", JSON.stringify(offlineBiz));
     } finally {
       setIsLoading(false);
     }

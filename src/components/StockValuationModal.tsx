@@ -34,8 +34,6 @@ export const StockValuationModal: React.FC<StockValuationModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"cost_value" | "retail_value" | "profit" | "margin">("cost_value");
 
-  if (!isOpen) return null;
-
   // 1. Overall Aggregates
   const totalCostValue = items.reduce((sum, i) => sum + i.quantity * i.costPrice, 0);
   const totalRetailValue = items.reduce((sum, i) => sum + i.quantity * i.sellingPrice, 0);
@@ -99,6 +97,8 @@ export const StockValuationModal: React.FC<StockValuationModalProps> = ({
       return 0;
     });
   }, [items, selectedCategory, sortBy]);
+
+  if (!isOpen) return null;
 
   // Export CSV
   const handleExportCSV = () => {

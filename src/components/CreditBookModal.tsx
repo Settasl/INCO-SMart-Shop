@@ -75,8 +75,6 @@ export const CreditBookModal: React.FC<CreditBookModalProps> = ({
   const [itemSearch, setItemSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
   // Key Financial Metrics
   const totalCashOutOnCredit = useMemo(() => {
     return credits
@@ -115,6 +113,8 @@ export const CreditBookModal: React.FC<CreditBookModalProps> = ({
       return matchName || matchPhone || matchNotes || matchItem;
     });
   }, [credits, filter, search]);
+
+  if (!isOpen) return null;
 
   // Handle Record Payment Submit
   const handlePaymentSubmit = (e: React.FormEvent) => {

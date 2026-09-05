@@ -184,6 +184,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     }
   }, [lockoutTimer]);
 
+  // Auto-refresh users when unlocked
+  useEffect(() => {
+    if (isOpen && isUnlocked && onRefreshUsers) {
+      onRefreshUsers();
+    }
+  }, [isOpen, isUnlocked, onRefreshUsers]);
+
   if (!isOpen) return null;
 
   const isSuperAdminAccount =
@@ -228,13 +235,6 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       setIsSyncingCloud(false);
     }
   };
-
-  // Auto-refresh users when unlocked
-  useEffect(() => {
-    if (isUnlocked && onRefreshUsers) {
-      onRefreshUsers();
-    }
-  }, [isUnlocked]);
 
   // Handle Security Gate Submission
   const handleUnlockGate = (e: React.FormEvent) => {
