@@ -10,6 +10,19 @@
     --neon-emerald: #10b981;
     --neon-cyan: #06b6d4;
     --neon-rose: #f43f5e;
+    font-size: 13.5px;
+  }
+
+  @media (min-width: 640px) {
+    :root {
+      font-size: 14px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    :root {
+      font-size: 14.5px;
+    }
   }
 
   body {
@@ -21,74 +34,163 @@
 }
 
 /* =========================================================
-   INCO GLASS SILK THEME - Pristine Contrast & Luxury Sheen
+   INCO LEAN UI - Crisp Solid Surfaces & Maximum Contrast
    ========================================================= */
 
-/* Silky Glass Surface */
-.glass-silk-card {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.88) 0%,
-    rgba(248, 250, 252, 0.82) 100%
-  );
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(226, 232, 240, 0.85);
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+/* Solid Lean Card (High Contrast Light & Dark) */
+.liquid-tinted-glass-card,
+.liquid-glass-card,
+.glass-silk-card,
+.lean-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
 }
 
-.dark .glass-silk-card {
-  background: linear-gradient(
-    135deg,
-    rgba(20, 27, 43, 0.85) 0%,
-    rgba(14, 19, 31, 0.9) 100%
-  );
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+.dark .liquid-tinted-glass-card,
+.dark .liquid-glass-card,
+.dark .glass-silk-card,
+.dark .lean-card {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  color: #f8fafc;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
 }
 
-/* Interactive Glass Silk Card with subtle lift */
-.glass-silk-interactive {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+/* Lean Interactive Hover */
+.liquid-tinted-glass-interactive,
+.liquid-glass-interactive,
+.glass-silk-interactive,
+.lean-interactive {
+  transition: all 0.15s ease-out;
 }
 
-.glass-silk-interactive:hover {
-  transform: translateY(-2px);
-  border-color: rgba(255, 230, 0, 0.5);
-  box-shadow: 0 12px 28px -6px rgba(14, 19, 31, 0.12), 0 0 16px -2px rgba(255, 230, 0, 0.25);
+.liquid-tinted-glass-interactive:hover,
+.liquid-glass-interactive:hover,
+.glass-silk-interactive:hover,
+.lean-interactive:hover {
+  transform: translateY(-1px);
+  border-color: #f59e0b;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08);
 }
 
-.dark .glass-silk-interactive:hover {
-  transform: translateY(-2px);
-  border-color: rgba(255, 230, 0, 0.35);
-  box-shadow: 0 14px 36px -6px rgba(0, 0, 0, 0.6), 0 0 20px -2px rgba(255, 230, 0, 0.2);
+.dark .liquid-tinted-glass-interactive:hover,
+.dark .liquid-glass-interactive:hover,
+.dark .glass-silk-interactive:hover,
+.dark .lean-interactive:hover {
+  transform: translateY(-1px);
+  border-color: #fbbf24;
+  box-shadow: 0 6px 16px -2px rgba(0, 0, 0, 0.5);
 }
 
-/* Glass Silk Modal & Drawer Panels */
-.glass-silk-panel {
-  background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.96) 0%,
-    rgba(241, 245, 249, 0.94) 100%
-  );
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  box-shadow: 0 24px 64px -12px rgba(15, 23, 42, 0.2);
+/* Lean Panels (Modals, Navigation, Sheets, Drawers) - 100% Solid & High Contrast */
+.liquid-tinted-glass-panel,
+.liquid-glass-panel,
+.glass-silk-panel,
+.lean-panel {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 }
 
-.dark .glass-silk-panel {
-  background: linear-gradient(
-    145deg,
-    rgba(17, 23, 37, 0.95) 0%,
-    rgba(10, 14, 23, 0.98) 100%
-  );
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 28px 72px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+.dark .liquid-tinted-glass-panel,
+.dark .liquid-glass-panel,
+.dark .glass-silk-panel,
+.dark .lean-panel {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  color: #f8fafc;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* Lean Button (High Contrast & Tactile) */
+.liquid-tinted-glass-btn,
+.liquid-glass-btn,
+.lean-btn {
+  background-color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease-out;
+}
+
+.liquid-tinted-glass-btn:hover,
+.liquid-glass-btn:hover,
+.lean-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+  color: #020617;
+}
+
+.dark .liquid-tinted-glass-btn,
+.dark .liquid-glass-btn,
+.dark .lean-btn {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  color: #f8fafc;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.dark .liquid-tinted-glass-btn:hover,
+.dark .liquid-glass-btn:hover,
+.dark .lean-btn:hover {
+  background-color: #334155;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+/* Lean Input (Crisp Focus & High Legibility) */
+.liquid-tinted-glass-input,
+.liquid-glass-input,
+.lean-input {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dark .liquid-tinted-glass-input,
+.dark .liquid-glass-input,
+.dark .lean-input {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  color: #f8fafc;
+}
+
+.liquid-tinted-glass-input:focus,
+.liquid-glass-input:focus,
+.lean-input:focus {
+  border-color: #f59e0b;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+
+.dark .liquid-tinted-glass-input:focus,
+.dark .liquid-glass-input:focus,
+.dark .lean-input:focus {
+  border-color: #fbbf24;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25);
+}
+
+/* Micro-Scale Typography Helpers */
+.text-nano {
+  font-size: 9px;
+  line-height: 12px;
+  letter-spacing: 0.02em;
+}
+
+.text-micro {
+  font-size: 10px;
+  line-height: 13px;
+  letter-spacing: 0.01em;
+}
+
+.text-compact {
+  font-size: 11px;
+  line-height: 15px;
 }
 
 /* INCO Signature Yellow Primary Button (Zero Contrast Issues - Deep Black on Vibrant Yellow) */

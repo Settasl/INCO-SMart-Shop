@@ -7,6 +7,8 @@ import {
   signUpWithEmail,
   signInWithGoogle,
   signInWithGoogleEmail,
+  signInWithApple,
+  signInWithAppleEmail,
   sendPasswordReset,
   signOutUser,
 } from "../lib/firebase";
@@ -28,10 +30,12 @@ export interface AuthContextValue {
   status: AuthStatus;
   isLoading: boolean;
   error: string | null;
-  signIn: (email: string, pass: string) => Promise<void>;
-  signUp: (email: string, pass: string, displayName: string) => Promise<void>;
-  signInWithGoogleAuth: (fallbackEmail?: string) => Promise<void>;
-  signInWithGoogleDirectEmail: (email: string, displayName?: string) => Promise<void>;
+  signIn: (email: string, pass: string) => Promise<User>;
+  signUp: (email: string, pass: string, displayName: string) => Promise<User>;
+  signInWithGoogleAuth: (fallbackEmail?: string) => Promise<User>;
+  signInWithGoogleDirectEmail: (email: string, displayName?: string) => Promise<User>;
+  signInWithAppleAuth: (fallbackEmail?: string) => Promise<User>;
+  signInWithAppleDirectEmail: (email: string, displayName?: string) => Promise<User>;
   resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
@@ -75,10 +79,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [user]);
 
-  const handleSignIn = async (email: string, pass: string) => {
+  const handleSignIn = async (email: string, pass: string): Promise<User> => {
     try {
       setError(null);
-      await signInWithEmail(email, pass);
+      return await signInWithEmail(email, pass);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to sign in";
       setError(msg);
@@ -86,10 +90,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const handleSignUp = async (email: string, pass: string, displayName: string) => {
+  const handleSignUp = async (email: string, pass: string, displayName: string): Promise<User> => {
     try {
       setError(null);
-      await signUpWithEmail(email, pass, displayName);
+      return await signUpWithEmail(email, pass, displayName);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to register account";
       setError(msg);
@@ -97,10 +101,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const handleGoogleSignIn = async (fallbackEmail?: string) => {
+  const handleGoogleSignIn = async (fallbackEmail?: string): Promise<User> => {
     try {
       setError(null);
-      await signInWithGoogle(fallbackEmail);
+      return await signInWithGoogle(fallbackEmail);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google sign in was cancelled or failed";
       setError(msg);
@@ -108,12 +112,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const handleGoogleDirectEmail = async (email: string, displayName?: string) => {
+  const handleGoogleDirectEmail = async (email: string, displayName?: string): Promise<User> => {
     try {
       setError(null);
-      await signInWithGoogleEmail(email, displayName);
+      return await signInWithGoogleEmail(email, displayName);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google email authentication failed";
+      setError(msg);
+      throw err;
+    }
+  };
+
+  const handleAppleSignIn = async (fallbackEmail?: string): Promise<User> => {
+    try {
+      setError(null);
+      return await signInWithApple(fallbackEmail);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Apple sign in was cancelled or failed";
+      setError(msg);
+      throw err;
+    }
+  };
+
+  const handleAppleDirectEmail = async (email: string, displayName?: string): Promise<User> => {
+    try {
+      setError(null);
+      return await signInWithAppleEmail(email, displayName);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Apple ID authentication failed";
       setError(msg);
       throw err;
     }
@@ -153,6 +179,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUp: handleSignUp,
     signInWithGoogleAuth: handleGoogleSignIn,
     signInWithGoogleDirectEmail: handleGoogleDirectEmail,
+    signInWithAppleAuth: handleAppleSignIn,
+    signInWithAppleDirectEmail: handleAppleDirectEmail,
     resetPassword: handleResetPassword,
     signOut: handleSignOut,
     clearError,

@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-slate-100 font-sans">
-          <div className="max-w-md w-full glass-silk-panel p-6 rounded-2xl border border-yellow-500/30 text-center shadow-2xl">
+          <div className="max-w-md w-full bg-slate-900 p-6 rounded-2xl border border-yellow-500/30 text-center shadow-2xl">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center text-yellow-400 font-black text-2xl">
               INCO
             </div>

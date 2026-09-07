@@ -21,6 +21,7 @@ import { DashboardAnalyticsSection } from "./components/DashboardAnalyticsSectio
 import { StockValuationModal } from "./components/StockValuationModal";
 import { WhatsAppOrderModal } from "./components/WhatsAppOrderModal";
 import { InstallAppBanner } from "./components/InstallAppBanner";
+import { InstallShortcutModal } from "./components/InstallShortcutModal";
 import { MobileBottomNav } from "./components/MobileBottomNav";
 import { ChatModal } from "./components/ChatModal";
 import { ProfileModal } from "./components/ProfileModal";
@@ -286,6 +287,7 @@ export function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(false);
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
+  const [isInstallShortcutOpen, setIsInstallShortcutOpen] = useState(false);
 
   // Community Chat & Back-office State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
@@ -423,6 +425,17 @@ export function App() {
     setRegisteredAccounts(updatedAccounts);
     setIsAuthOpen(false);
     showToast(`Welcome back, ${account.displayName || account.emailOrPhone}!`, "success");
+
+    // Automatically prompt to install home screen shortcut after user sign up and login
+    const isStandalone =
+      (typeof window !== "undefined" && (window.navigator as any).standalone === true) ||
+      (typeof window !== "undefined" && window.matchMedia("(display-mode: standalone)").matches);
+
+    if (!isStandalone) {
+      setTimeout(() => {
+        setIsInstallShortcutOpen(true);
+      }, 500);
+    }
   };
 
   // Logout handler
@@ -1553,6 +1566,11 @@ export function App() {
         onClose={() => setIsPrintSheetOpen(false)}
         items={items}
         settings={settings}
+      />
+
+      <InstallShortcutModal
+        forceOpen={isInstallShortcutOpen}
+        onClose={() => setIsInstallShortcutOpen(false)}
       />
 
       <AuthModal

@@ -537,9 +537,9 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       <div
         role="dialog"
         aria-modal="true"
-        className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 font-sans"
+        className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 font-sans"
       >
-        <div className="bg-slate-900 border-2 border-amber-400 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl relative overflow-hidden text-center space-y-4">
+        <div className="bg-white dark:bg-slate-900 border border-amber-400/50 rounded-2xl w-full max-w-sm sm:max-w-md p-5 sm:p-6 shadow-2xl relative overflow-hidden text-center space-y-3.5">
           {/* Top Amber Light Burst */}
           <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
 
@@ -645,9 +645,9 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="admin-portal-title"
-      className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-sans"
+      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-3 overflow-y-auto font-sans"
     >
-      <div className="bg-slate-900 border-2 border-amber-400/90 rounded-3xl w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+      <div className="bg-slate-950 border border-amber-400/40 rounded-2xl w-full max-w-6xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden my-auto">
         {/* Top Command Header Bar */}
         <div className="p-3.5 sm:p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
