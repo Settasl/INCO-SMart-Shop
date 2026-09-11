@@ -20,6 +20,8 @@ import {
   loadRegisteredAccounts,
   saveRegisteredAccounts,
   setActiveSessionUser,
+  registerUserOnBackend,
+  broadcastUsersChange,
 } from "../lib/userRegistry";
 import { sounds } from "../lib/sound";
 import { useAuth } from "../context/AuthContext";
@@ -141,10 +143,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         isVerified: true,
         verificationStatus: "approved",
         accountStatus: "active",
-        isPro: false,
+        isPro: email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase(),
         avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
         createdAt: new Date().toISOString(),
       };
+
+      // 1. Save immediately to local registry
+      const localAccs = loadRegisteredAccounts();
+      const updatedAccounts = [account, ...localAccs.filter((a) => a.emailOrPhone.toLowerCase() !== email.toLowerCase())];
+      saveRegisteredAccounts(updatedAccounts);
+      setActiveSessionUser(account);
+
+      // 2. Persist to backend server so admin backend updates immediately
+      registerUserOnBackend({
+        emailOrPhone: email,
+        password: password,
+        displayName,
+        storeName: storeName.trim() || "My Store",
+        role: account.role,
+      }).catch((err) => console.warn("[Auth] Background server sync warning:", err));
+
+      // 3. Broadcast update to admin portal in all tabs
+      broadcastUsersChange();
 
       setIsLoading(false);
       sounds.playSuccess();

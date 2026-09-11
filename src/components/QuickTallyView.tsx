@@ -28,10 +28,16 @@ import {
   Zap,
   Hand,
   MoveHorizontal,
+  Sliders,
+  ChevronDown,
+  FolderCheck,
+  CheckCheck,
 } from "lucide-react";
 import { InventoryItem, Category, StoreSettings } from "../types";
 import { CATEGORIES } from "../data/sampleData";
 import { SwipeableStockRow } from "./SwipeableStockRow";
+import { BulkEditModal } from "./BulkEditModal";
+import { sounds } from "../lib/sound";
 
 interface QuickTallyViewProps {
   items: InventoryItem[];
@@ -44,6 +50,7 @@ interface QuickTallyViewProps {
   onUpdateItem: (item: InventoryItem) => void;
   onDeleteItem: (id: string) => void;
   onDeleteBatchItems?: (ids: string[]) => void;
+  onUpdateBatchItems?: (updates: Array<{ id: string; changes: Partial<InventoryItem> }>) => void;
   onScanItemBarcode: (item: InventoryItem) => void;
   onOpenLowStockEmailAlert?: () => void;
   onQuickSellItem?: (item: InventoryItem) => void;
@@ -60,6 +67,7 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
   onUpdateItem,
   onDeleteItem,
   onDeleteBatchItems,
+  onUpdateBatchItems,
   onScanItemBarcode,
   onOpenLowStockEmailAlert,
   onQuickSellItem,
@@ -72,6 +80,8 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
   // Multi-select Batch state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isConfirmBatchDeleteOpen, setIsConfirmBatchDeleteOpen] = useState(false);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [isGroupSelectMenuOpen, setIsGroupSelectMenuOpen] = useState(false);
 
   // Quantity Flash animation tracker
   const [flashState, setFlashState] = useState<
@@ -179,6 +189,38 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
     setSelectedIds([]);
   };
 
+  // Group selection helpers
+  const selectCategoryGroup = (category: string) => {
+    sounds.playClick();
+    if (category === "All") {
+      const allIds = items.map((i) => i.id);
+      setSelectedIds(allIds);
+    } else {
+      const categoryIds = items.filter((i) => i.category === category).map((i) => i.id);
+      const areAllCatSelected = categoryIds.length > 0 && categoryIds.every((id) => selectedIds.includes(id));
+      if (areAllCatSelected) {
+        const catIdSet = new Set(categoryIds);
+        setSelectedIds((prev) => prev.filter((id) => !catIdSet.has(id)));
+      } else {
+        setSelectedIds((prev) => Array.from(new Set([...prev, ...categoryIds])));
+      }
+    }
+    setIsGroupSelectMenuOpen(false);
+  };
+
+  const selectStockStatusGroup = (status: "low_stock" | "out_of_stock") => {
+    sounds.playClick();
+    let targetItems: InventoryItem[] = [];
+    if (status === "low_stock") {
+      targetItems = items.filter((i) => i.quantity <= i.reorderPoint && i.quantity > 0);
+    } else if (status === "out_of_stock") {
+      targetItems = items.filter((i) => i.quantity === 0);
+    }
+    const targetIds = targetItems.map((i) => i.id);
+    setSelectedIds(targetIds);
+    setIsGroupSelectMenuOpen(false);
+  };
+
   const handleExecuteBatchDelete = () => {
     if (selectedIds.length === 0) return;
     if (onDeleteBatchItems) {
@@ -188,6 +230,21 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
     }
     setSelectedIds([]);
     setIsConfirmBatchDeleteOpen(false);
+  };
+
+  const handleExecuteBulkEdit = (updates: Array<{ id: string; changes: Partial<InventoryItem> }>) => {
+    if (onUpdateBatchItems) {
+      onUpdateBatchItems(updates);
+    } else {
+      updates.forEach((u) => {
+        const current = items.find((i) => i.id === u.id);
+        if (current) {
+          onUpdateItem({ ...current, ...u.changes, lastCountedAt: new Date().toISOString() });
+        }
+      });
+    }
+    setSelectedIds([]);
+    setIsBulkEditOpen(false);
   };
 
   // Selected items summary calculations
@@ -203,35 +260,35 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
   return (
     <div className="space-y-4 pb-24 relative">
       {/* Search, Filter & View Controls */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-2.5 sm:p-3 border border-slate-200 dark:border-slate-800 shadow-xs space-y-2.5 transition-colors">
-        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
+        <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
           {/* Search Input */}
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               id="tally-search-input"
               type="text"
               placeholder="Search by name, medicine, shoes, clothes, barcode, shelf..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-8 py-1.5 text-micro bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-900 dark:text-white placeholder-slate-400 font-medium transition-colors"
+              className="w-full pl-11 pr-10 py-2.5 text-sm sm:text-base bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-900 dark:text-white placeholder-slate-400 font-semibold transition-colors min-h-[44px]"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-nano bg-slate-200 dark:bg-slate-700 rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs bg-slate-200 dark:bg-slate-700 rounded-full w-5 h-5 flex items-center justify-center font-bold"
               >
                 ✕
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             {/* Select All Toggle Button */}
             <button
               id="tally-select-all-btn"
               onClick={toggleSelectAllFiltered}
-              className={`flex items-center gap-1 px-2.5 py-1 text-micro font-bold rounded-lg border transition-colors shrink-0 ${
+              className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-bold rounded-xl border transition-colors shrink-0 cursor-pointer min-h-[42px] ${
                 areAllFilteredSelected
                   ? "bg-amber-400 text-slate-950 border-amber-400 font-black shadow-xs"
                   : selectedIds.length > 0
@@ -241,13 +298,13 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
               title="Toggle Select All Filtered Items"
             >
               {areAllFilteredSelected ? (
-                <CheckSquare className="w-3.5 h-3.5 text-slate-950" />
+                <CheckSquare className="w-4 h-4 text-slate-950 stroke-[2.5]" />
               ) : selectedIds.length > 0 ? (
-                <div className="w-3.5 h-3.5 rounded bg-slate-800 dark:bg-amber-400 text-white dark:text-slate-950 flex items-center justify-center text-[9px] font-black">
+                <div className="w-4 h-4 rounded bg-slate-800 dark:bg-amber-400 text-white dark:text-slate-950 flex items-center justify-center text-xs font-black">
                   {selectedIds.length}
                 </div>
               ) : (
-                <Square className="w-3.5 h-3.5 text-slate-400" />
+                <Square className="w-4 h-4 text-slate-400" />
               )}
               <span>
                 {areAllFilteredSelected
@@ -258,13 +315,119 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
               </span>
             </button>
 
+            {/* Group Selection Dropdown Menu */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsGroupSelectMenuOpen(!isGroupSelectMenuOpen)}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-bold rounded-xl border transition-all shrink-0 cursor-pointer min-h-[42px] ${
+                  isGroupSelectMenuOpen
+                    ? "bg-amber-400 text-slate-950 border-amber-400 font-black shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+                title="Select a whole category group or stock condition group"
+              >
+                <Boxes className="w-4 h-4 text-amber-500" />
+                <span>Group Select</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isGroupSelectMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {isGroupSelectMenuOpen && (
+                <div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-2 z-50 w-76 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-2xl space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <span className="font-black text-slate-900 dark:text-white uppercase tracking-wider text-xs">
+                      Group Selection
+                    </span>
+                    {selectedIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearSelection();
+                          setIsGroupSelectMenuOpen(false);
+                        }}
+                        className="text-xs text-rose-500 hover:underline font-bold"
+                      >
+                        Clear ({selectedIds.length})
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Condition Groups */}
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                      Condition Groups
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => selectStockStatusGroup("low_stock")}
+                      className="w-full px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 text-xs sm:text-sm font-bold flex items-center justify-between transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        <span>Low Stock Group</span>
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-950 dark:text-amber-100 font-mono font-bold">
+                        {items.filter((i) => i.quantity <= i.reorderPoint && i.quantity > 0).length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => selectStockStatusGroup("out_of_stock")}
+                      className="w-full px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-900 dark:text-rose-200 text-xs sm:text-sm font-bold flex items-center justify-between transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <XCircle className="w-4 h-4 text-rose-500" />
+                        <span>Out of Stock Group</span>
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-rose-200 dark:bg-rose-800 text-rose-950 dark:text-rose-100 font-mono font-bold">
+                        {items.filter((i) => i.quantity === 0).length}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Category Groups */}
+                  <div className="space-y-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                      Select by Category Group
+                    </span>
+                    <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+                      {CATEGORIES.filter((c) => c !== "All").map((cat) => {
+                        const count = items.filter((i) => i.category === cat).length;
+                        if (count === 0) return null;
+                        const catItemIds = items.filter((i) => i.category === cat).map((i) => i.id);
+                        const isCatFullySelected = catItemIds.every((id) => selectedIds.includes(id));
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => selectCategoryGroup(cat)}
+                            className={`w-full px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                              isCatFullySelected
+                                ? "bg-amber-100 dark:bg-amber-950/60 text-slate-900 dark:text-white font-bold"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            <span className="truncate max-w-[180px] text-left">{cat}</span>
+                            <span className="text-xs font-mono text-slate-400 shrink-0 font-bold">
+                              {count} items
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Sort Dropdown */}
             <div className="relative flex-1 sm:flex-initial">
               <select
                 id="tally-sort-select"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="w-full sm:w-auto pl-2.5 pr-7 py-1 text-micro font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-amber-400"
+                className="w-full sm:w-auto pl-3 pr-8 py-2 text-xs sm:text-sm font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 focus:outline-none focus:border-amber-400 min-h-[42px]"
               >
                 <option value="quantity_asc">Lowest Stock First</option>
                 <option value="quantity_desc">Highest Stock First</option>
@@ -274,28 +437,28 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0">
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 gap-1">
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-1 rounded-md ${
+                className={`p-2 rounded-lg transition-all min-w-[38px] min-h-[38px] flex items-center justify-center ${
                   viewMode === "list"
                     ? "bg-amber-400 text-slate-950 shadow-xs font-bold"
                     : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
                 }`}
                 title="List View with Quick Swipe Gestures"
               >
-                <List className="w-3.5 h-3.5" />
+                <List className="w-4.5 h-4.5" />
               </button>
               <button
                 onClick={() => setViewMode("grid")}
-                className={`p-1 rounded-md ${
+                className={`p-2 rounded-lg transition-all min-w-[38px] min-h-[38px] flex items-center justify-center ${
                   viewMode === "grid"
                     ? "bg-amber-400 text-slate-950 shadow-xs font-bold"
                     : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
                 }`}
                 title="Grid View"
               >
-                <Grid className="w-3.5 h-3.5" />
+                <Grid className="w-4.5 h-4.5" />
               </button>
             </div>
 
@@ -303,19 +466,19 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
             <button
               id="tally-add-item-btn"
               onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-1 px-2.5 py-1 btn-inco-yellow text-micro font-black rounded-lg transition-all shadow-xs shrink-0"
+              className="flex items-center gap-1.5 px-3.5 py-2 btn-inco-yellow text-xs sm:text-sm font-black rounded-xl transition-all shadow-xs shrink-0 min-h-[42px]"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span className="hidden sm:inline">Add Item</span>
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>Add Item</span>
             </button>
           </div>
         </div>
 
         {/* Category Pills Slider */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-micro font-medium border-t border-slate-200 dark:border-slate-800 pt-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs sm:text-sm font-semibold border-t border-slate-200 dark:border-slate-800 pt-2.5">
           <button
             onClick={() => setSelectedCategory("All")}
-            className={`px-2.5 py-0.5 rounded-full border transition-all shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full border transition-all shrink-0 ${
               selectedCategory === "All"
                 ? "bg-amber-400 text-slate-950 border-amber-400 font-bold shadow-xs"
                 : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
@@ -329,7 +492,7 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-2.5 py-0.5 rounded-full border transition-all shrink-0 ${
+                className={`px-3.5 py-1.5 rounded-full border transition-all shrink-0 ${
                   selectedCategory === cat
                     ? "bg-amber-400 text-slate-950 border-amber-400 font-bold shadow-xs"
                     : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
@@ -344,14 +507,14 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
 
       {/* Swipe Gesture Hint in List View */}
       {viewMode === "list" && (
-        <div className="flex items-center justify-between px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-nano text-slate-600 dark:text-slate-300 font-medium shadow-2xs">
-          <div className="flex items-center gap-1.5">
-            <Hand className="w-3 h-3 text-amber-500 dark:text-amber-400" />
+        <div className="flex items-center justify-between px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-semibold shadow-2xs">
+          <div className="flex items-center gap-2">
+            <Hand className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0" />
             <span>
               <strong>Swipe Gestures:</strong> Swipe row <strong>Right 👉</strong> to add +1, swipe <strong>Left 👈</strong> to subtract -1.
             </span>
           </div>
-          <span className="hidden sm:inline text-nano text-slate-400">
+          <span className="hidden sm:inline text-xs text-slate-400 font-medium">
             Rapid stock counting without opening modals
           </span>
         </div>
@@ -359,26 +522,26 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
 
       {/* Filter Status Bar if Active */}
       {activeFilter !== "all" && (
-        <div className="flex items-center justify-between px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 font-medium">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+        <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs sm:text-sm text-amber-900 dark:text-amber-200 font-bold">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <span>
               Showing <strong>{activeFilter === "low_stock" ? "Low Stock Items" : "Out of Stock Items"}</strong> ({filteredItems.length} found)
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {onOpenLowStockEmailAlert && (
               <button
                 onClick={onOpenLowStockEmailAlert}
-                className="text-amber-800 dark:text-amber-300 hover:text-amber-950 dark:hover:text-amber-100 font-bold flex items-center gap-1 bg-amber-100 dark:bg-amber-900/50 px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-700"
+                className="text-amber-800 dark:text-amber-300 hover:text-amber-950 dark:hover:text-amber-100 font-bold flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900/50 px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 text-xs sm:text-sm cursor-pointer"
               >
-                <Mail className="w-3.5 h-3.5" />
+                <Mail className="w-4 h-4" />
                 <span>Email Alert Summary</span>
               </button>
             )}
             <button
               onClick={() => setActiveFilter("all")}
-              className="text-amber-700 dark:text-amber-300 hover:text-amber-900 font-bold underline"
+              className="text-amber-700 dark:text-amber-300 hover:text-amber-900 font-bold underline cursor-pointer"
             >
               Clear Filter
             </button>
@@ -437,7 +600,7 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
         </div>
       ) : (
         /* GRID VIEW */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredItems.map((item) => {
             const isOutOfStock = item.quantity === 0;
             const isLowStock = item.quantity <= item.reorderPoint && !isOutOfStock;
@@ -447,7 +610,7 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
             return (
               <div
                 key={item.id}
-                className={`bg-white dark:bg-slate-900 rounded-2xl border p-3 shadow-xs flex flex-col justify-between gap-2.5 transition-all ${
+                className={`bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-xs flex flex-col justify-between gap-3 transition-all ${
                   isSelected
                     ? "border-amber-400 dark:border-amber-400 ring-2 ring-amber-400/50 bg-amber-50/50 dark:bg-amber-950/30"
                     : isOutOfStock
@@ -458,29 +621,29 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
                 }`}
               >
                 {/* Header Row: Checkbox, Name, Status */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5 min-w-0">
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-start gap-3 min-w-0">
                     <button
                       type="button"
                       onClick={() => toggleSelectItem(item.id)}
-                      className={`p-1 rounded-md transition-all shrink-0 mt-0.5 ${
+                      className={`w-7 h-7 rounded-lg transition-all shrink-0 mt-0.5 flex items-center justify-center cursor-pointer ${
                         isSelected
                           ? "bg-amber-400 text-slate-950 shadow-xs"
                           : "bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                       }`}
                     >
-                      {isSelected ? <Check className="w-3 h-3 stroke-[3]" /> : <div className="w-3 h-3" />}
+                      {isSelected ? <Check className="w-4 h-4 stroke-[3]" /> : <div className="w-4 h-4" />}
                     </button>
                     <div className="min-w-0">
-                      <h4 className="font-bold text-micro text-slate-900 dark:text-white leading-tight truncate">
+                      <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-white leading-tight truncate">
                         {item.name}
                       </h4>
-                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                        <span className="text-nano px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium">
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold">
                           {item.category}
                         </span>
                         {item.location && (
-                          <span className="text-nano text-slate-400 dark:text-slate-500">
+                          <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
                             &bull; {item.location}
                           </span>
                         )}
@@ -490,47 +653,47 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
 
                   {/* Status Badge */}
                   {isOutOfStock ? (
-                    <span className="text-nano px-1.5 py-0.5 rounded font-bold bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 shrink-0">
+                    <span className="text-xs px-2 py-0.5 rounded-lg font-black bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 shrink-0">
                       Out of Stock
                     </span>
                   ) : isLowStock ? (
-                    <span className="text-nano px-1.5 py-0.5 rounded font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 shrink-0">
+                    <span className="text-xs px-2 py-0.5 rounded-lg font-black bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 shrink-0">
                       Low Stock
                     </span>
                   ) : (
-                    <span className="text-nano px-1.5 py-0.5 rounded font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 shrink-0">
+                    <span className="text-xs px-2 py-0.5 rounded-lg font-black bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 shrink-0">
                       In Stock
                     </span>
                   )}
                 </div>
 
                 {/* Pricing & SKU */}
-                <div className="flex items-center justify-between text-micro text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between text-xs sm:text-sm text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-100 dark:border-slate-800">
                   <div>
                     Price:{" "}
-                    <strong className="text-slate-900 dark:text-white font-bold">
+                    <strong className="text-slate-900 dark:text-white font-black text-sm sm:text-base">
                       {settings.currencySymbol}
                       {item.sellingPrice.toFixed(2)}
                     </strong>
                   </div>
                   {item.sku && (
-                    <span className="font-mono text-nano text-slate-400 dark:text-slate-500">
+                    <span className="font-mono text-xs text-slate-400 dark:text-slate-500 font-semibold">
                       {item.sku}
                     </span>
                   )}
                 </div>
 
                 {/* Counter Cluster */}
-                <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 flex-1 justify-between">
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 flex-1 justify-between gap-1">
                     <button
                       onClick={() => handleQuantityWithFlash(item.id, -1)}
-                      className="p-1 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white rounded-md shadow-2xs transition-colors"
+                      className="p-1.5 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white rounded-lg shadow-2xs transition-colors cursor-pointer min-w-[32px] min-h-[32px] flex items-center justify-center"
                     >
-                      <Minus className="w-3 h-3" />
+                      <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
                     </button>
 
-                    <div className="text-center px-1.5">
+                    <div className="text-center px-1">
                       <input
                         type="number"
                         min="0"
@@ -542,7 +705,7 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
                             isNaN(val) ? 0 : Math.max(0, val)
                           );
                         }}
-                        className={`w-10 text-center font-black text-micro py-0.5 rounded border transition-all ${
+                        className={`w-14 text-center font-black text-sm sm:text-base py-1 rounded-lg border transition-all ${
                           currentFlash?.type === "up"
                             ? "bg-emerald-200 text-emerald-950 border-emerald-500 ring-2 ring-emerald-500 scale-105"
                             : currentFlash?.type === "down"
@@ -550,45 +713,45 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
                             : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                         }`}
                       />
-                      <span className="text-nano text-slate-400 block -mt-0.5">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block mt-0.5">
                         {item.unit}
                       </span>
                     </div>
 
                     <button
                       onClick={() => handleQuantityWithFlash(item.id, 1)}
-                      className="p-1 btn-inco-yellow text-slate-950 rounded-md shadow-2xs transition-colors"
+                      className="p-1.5 btn-inco-yellow text-slate-950 rounded-lg shadow-2xs transition-colors cursor-pointer min-w-[32px] min-h-[32px] flex items-center justify-center"
                     >
-                      <Plus className="w-3 h-3 stroke-[3]" />
+                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     </button>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-0.5">
+                  <div className="flex items-center gap-1">
                     {item.quantity > 0 && onQuickSellItem && (
                       <button
                         type="button"
                         onClick={() => onQuickSellItem(item)}
-                        className="px-1.5 py-0.5 btn-inco-yellow text-slate-950 font-black text-nano rounded-md shadow-xs transition-transform active:scale-95 flex items-center gap-0.5"
+                        className="px-2.5 py-1.5 btn-inco-yellow text-slate-950 font-black text-xs rounded-xl shadow-xs transition-transform active:scale-95 flex items-center gap-1 min-h-[36px] cursor-pointer"
                         title={`Quick Sell 1 ${item.unit} of "${item.name}"`}
                       >
-                        <Zap className="w-2.5 h-2.5 fill-slate-950" />
+                        <Zap className="w-3 h-3 fill-slate-950" />
                         <span>Sell</span>
                       </button>
                     )}
                     <button
                       onClick={() => onScanItemBarcode(item)}
-                      className="p-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-md"
+                      className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
                       title="Barcode"
                     >
-                      <Barcode className="w-3.5 h-3.5" />
+                      <Barcode className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setEditingItem(item)}
-                      className="p-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-md"
+                      className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
                       title="Edit"
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <Edit2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -600,18 +763,18 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
 
       {/* Floating Multi-Select Batch Action Bar */}
       {selectedIds.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-950 dark:bg-slate-900 text-white rounded-2xl p-3 sm:px-5 sm:py-3.5 shadow-2xl border border-slate-700 dark:border-slate-700 flex items-center justify-between gap-4 max-w-lg w-[92%] sm:w-auto animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-yellow-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-xs">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-950 dark:bg-slate-900 text-white rounded-2xl p-3.5 sm:px-6 sm:py-4 shadow-2xl border border-slate-700 dark:border-slate-700 flex items-center justify-between gap-4 max-w-xl w-[94%] sm:w-auto animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-3.5">
+            <div className="w-9 h-9 rounded-xl bg-yellow-400 text-slate-950 font-black text-sm flex items-center justify-center shadow-xs">
               {selectedIds.length}
             </div>
             <div>
-              <div className="font-bold text-xs sm:text-sm leading-tight text-white">
+              <div className="font-extrabold text-sm sm:text-base leading-tight text-white">
                 {selectedIds.length} {selectedIds.length === 1 ? "Item" : "Items"} Selected
               </div>
-              <div className="text-[10px] text-slate-400">
+              <div className="text-xs text-slate-400">
                 Total Value:{" "}
-                <strong className="text-yellow-400">
+                <strong className="text-yellow-400 font-black">
                   {settings.currencySymbol}
                   {selectedTotalValuation.toFixed(2)}
                 </strong>
@@ -621,14 +784,26 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={clearSelection}
-              className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-white font-medium transition-colors"
+              className="px-3 py-2 text-xs sm:text-sm text-slate-400 hover:text-white font-bold transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
+              type="button"
+              onClick={() => setIsBulkEditOpen(true)}
+              className="px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-sm flex items-center gap-2 transition-colors cursor-pointer min-h-[42px]"
+              title="Bulk Edit selected items"
+            >
+              <Sliders className="w-4 h-4 stroke-[2.5]" />
+              <span>Bulk Edit ({selectedIds.length})</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setIsConfirmBatchDeleteOpen(true)}
-              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Delete all selected items"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete Selected</span>
@@ -707,6 +882,17 @@ export const QuickTallyView: React.FC<QuickTallyViewProps> = ({
             onUpdateItem({ ...editingItem, ...itemData });
             setEditingItem(null);
           }}
+        />
+      )}
+
+      {/* Bulk Edit Modal */}
+      {isBulkEditOpen && (
+        <BulkEditModal
+          isOpen={isBulkEditOpen}
+          onClose={() => setIsBulkEditOpen(false)}
+          selectedItems={selectedItemsList}
+          settings={settings}
+          onApplyBulkChanges={handleExecuteBulkEdit}
         />
       )}
     </div>

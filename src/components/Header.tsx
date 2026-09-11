@@ -86,40 +86,40 @@ export const Header: React.FC<HeaderProps> = ({
       className="bg-black text-white border-b border-slate-800 sticky top-0 z-30 font-sans shadow-md pt-[env(safe-area-inset-top,0px)]"
     >
       {/* Top Main Bar */}
-      <div className="w-full px-2.5 sm:px-5 py-1.5 flex items-center justify-between gap-2.5">
+      <div className="w-full px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
         {/* Left: Brand Logo & Store Name */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3.5 shrink-0">
           <div
             onClick={() => {
               sounds.playClick();
               onSelectView("stock");
             }}
-            className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
+            className="flex items-center gap-3 cursor-pointer hover:opacity-90 transition-opacity"
             title="Go to Stock Home"
           >
-            <BrandLogo size="xs" theme="yellow" showText={false} animated={false} />
+            <BrandLogo size="md" theme="yellow" showText={false} animated={false} />
             <div className="flex flex-col">
-              <div className="flex items-center gap-1 leading-none">
-                <span className="text-sm font-black tracking-tight text-white uppercase">
+              <div className="flex items-center gap-2 leading-none">
+                <span className="text-lg sm:text-xl font-black tracking-tight text-white uppercase">
                   INCO
                 </span>
-                <span className="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/15 border border-amber-400/40 px-1 py-0.2 rounded">
+                <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-amber-400 bg-amber-400/20 border border-amber-400/50 px-2 py-0.5 rounded-md">
                   Smart Shop
                 </span>
                 {userRole && (
-                  <span className="text-[8.5px] font-bold uppercase tracking-wider text-slate-300 bg-slate-900 border border-slate-800 px-1 py-0.2 rounded">
+                  <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300 bg-slate-900 border border-slate-700 px-2 py-0.5 rounded-md">
                     {userRole}
                   </span>
                 )}
               </div>
-              <span className="text-[9.5px] text-slate-400 font-medium truncate max-w-[120px] sm:max-w-none">
+              <span className="text-xs sm:text-sm text-slate-300 font-semibold truncate max-w-[150px] sm:max-w-xs mt-1">
                 {activeBusiness?.businessName || activeBusiness?.name || settings.storeName || "My Retail Store"}
               </span>
             </div>
           </div>
 
-          {/* Desktop Navigation Links (Permanent Black/Slate-900 Solid Lean Pill) */}
-          <nav className="hidden md:flex items-center gap-0.5 bg-slate-900 border border-slate-800 p-0.5 rounded-xl">
+          {/* Desktop Navigation Links */}
+          <nav className="hidden md:flex items-center gap-1.5 bg-slate-900 border border-slate-800 p-1.5 rounded-2xl">
             {navLinks.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeView === tab.id;
@@ -130,14 +130,14 @@ export const Header: React.FC<HeaderProps> = ({
                     sounds.playClick();
                     onSelectView(tab.id);
                   }}
-                  className={`px-2.5 py-1 rounded-lg text-micro font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 cursor-pointer min-h-[42px] ${
                     isActive
-                      ? "bg-amber-400 text-slate-950 shadow-xs font-black"
+                      ? "bg-amber-400 text-slate-950 shadow-sm font-black"
                       : "text-slate-300 hover:text-white hover:bg-slate-800"
                   }`}
                 >
                   <Icon
-                    className={`w-3 h-3 ${
+                    className={`w-5 h-5 ${
                       isActive ? "text-slate-950 stroke-[2.5]" : "text-amber-400"
                     }`}
                   />
@@ -150,13 +150,13 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Center: Search Bar */}
         <div className="relative flex-1 max-w-xs sm:max-w-sm md:max-w-md">
-          <Search className="w-3.5 h-3.5 text-amber-400 absolute left-2.5 top-2 pointer-events-none" />
+          <Search className="w-5 h-5 text-amber-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
             placeholder="Search product, barcode, SKU..."
-            className="w-full pl-8 pr-8 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-micro font-medium text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400 transition-all"
+            className="w-full pl-11 pr-10 py-2.5 bg-slate-900 border border-slate-800 rounded-2xl text-sm font-semibold text-white placeholder:text-slate-400 focus:outline-hidden focus:border-amber-400 transition-all min-h-[44px]"
           />
           {onOpenScanner && (
             <button
@@ -166,16 +166,16 @@ export const Header: React.FC<HeaderProps> = ({
                 sounds.triggerHaptic(15);
                 onOpenScanner();
               }}
-              className="absolute right-2 top-1.5 text-slate-400 hover:text-amber-400 cursor-pointer transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-400 cursor-pointer transition-colors p-1.5"
               title="Barcode Camera Scanner"
             >
-              <ScanLine className="w-3.5 h-3.5" />
+              <ScanLine className="w-5 h-5" />
             </button>
           )}
         </div>
 
-        {/* Right Actions: Permanent Black/Slate-900 Compact Lean Buttons */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Right Actions: Large Touch Target Permanent Black Buttons */}
+        <div className="flex items-center gap-2 shrink-0">
           {/* Quick Scanner Icon (Desktop/Tablet) */}
           {onOpenScanner && (
             <button
@@ -184,10 +184,10 @@ export const Header: React.FC<HeaderProps> = ({
                 sounds.triggerHaptic(20);
                 onOpenScanner();
               }}
-              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 text-amber-400 transition-all cursor-pointer shadow-xs"
+              className="p-3 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/60 text-amber-400 transition-all cursor-pointer shadow-xs min-h-[44px] min-w-[44px] flex items-center justify-center"
               title="Scan Barcode"
             >
-              <ScanLine className="w-3.5 h-3.5" />
+              <ScanLine className="w-5 h-5" />
             </button>
           )}
 
@@ -198,13 +198,13 @@ export const Header: React.FC<HeaderProps> = ({
                 sounds.playClick();
                 onToggleDarkMode();
               }}
-              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 text-slate-200 hover:text-amber-400 transition-all cursor-pointer shadow-xs"
+              className="p-3 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/60 text-slate-200 hover:text-amber-400 transition-all cursor-pointer shadow-xs min-h-[44px] min-w-[44px] flex items-center justify-center"
               title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
               {darkMode ? (
-                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <Sun className="w-5 h-5 text-amber-400" />
               ) : (
-                <Moon className="w-3.5 h-3.5 text-amber-300" />
+                <Moon className="w-5 h-5 text-amber-300" />
               )}
             </button>
           )}
@@ -216,11 +216,11 @@ export const Header: React.FC<HeaderProps> = ({
               if (onOpenNotifications) onOpenNotifications();
               else onOpenChat();
             }}
-            className="relative p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 text-slate-200 hover:text-amber-400 transition-all cursor-pointer shadow-xs"
+            className="relative p-3 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/60 text-slate-200 hover:text-amber-400 transition-all cursor-pointer shadow-xs min-h-[44px] min-w-[44px] flex items-center justify-center"
             title="Notifications & Desk"
           >
-            <Bell className="w-3.5 h-3.5" />
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 text-slate-950 text-[8px] font-black flex items-center justify-center shadow-xs">
+            <Bell className="w-5 h-5" />
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-400 text-slate-950 text-xs font-black flex items-center justify-center shadow-xs">
               3
             </span>
           </button>
@@ -228,24 +228,24 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Support Headphone Desk */}
           <button
             onClick={handleOpenSupport}
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/50 text-white font-bold text-micro transition-all shadow-xs cursor-pointer"
+            className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400/60 text-white font-bold text-sm transition-all shadow-xs cursor-pointer min-h-[44px]"
           >
-            <Headphones className="w-3 h-3 text-amber-400" />
+            <Headphones className="w-5 h-5 text-amber-400" />
             <span>Support</span>
           </button>
 
           {/* User Account / Profile Button */}
           <button
             onClick={handleOpenAccount}
-            className="flex items-center gap-1 p-0.5 sm:px-1.5 sm:py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400 transition-all cursor-pointer shadow-xs"
+            className="flex items-center gap-2.5 p-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-400 transition-all cursor-pointer shadow-xs min-h-[44px]"
             title="User Profile & Settings"
           >
             <BrandLogo size="xs" theme="yellowAppIcon" animated={false} />
-            <div className="hidden lg:flex flex-col text-left leading-none pr-0.5">
-              <span className="text-micro font-bold text-white truncate max-w-[90px]">
+            <div className="hidden lg:flex flex-col text-left leading-tight pr-1">
+              <span className="text-sm font-bold text-white truncate max-w-[120px]">
                 {userProfile?.displayName || "Merchant"}
               </span>
-              <span className="text-[8.5px] text-amber-400 font-semibold">
+              <span className="text-xs text-amber-400 font-semibold">
                 {isSuperAdmin ? "Super Admin" : "Active Store"}
               </span>
             </div>
@@ -253,8 +253,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Mobile Navigation Sub-Bar (Permanent Black Solid Lean) */}
-      <div className="md:hidden flex items-center justify-around border-t border-slate-800 px-1 py-1 bg-black overflow-x-auto scrollbar-none">
+      {/* Mobile Navigation Sub-Bar */}
+      <div className="md:hidden flex items-center justify-around border-t border-slate-800 px-2 py-2 bg-black overflow-x-auto scrollbar-none gap-1.5">
         {navLinks.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeView === tab.id;
@@ -265,14 +265,14 @@ export const Header: React.FC<HeaderProps> = ({
                 sounds.playClick();
                 onSelectView(tab.id);
               }}
-              className={`px-2 py-0.5 rounded-lg text-nano font-bold transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer min-h-[42px] ${
                 isActive
                   ? "bg-amber-400 text-slate-950 font-black shadow-xs"
-                  : "text-slate-400 hover:text-white"
+                  : "text-slate-300 hover:text-white"
               }`}
             >
               <Icon
-                className={`w-2.5 h-2.5 ${
+                className={`w-4.5 h-4.5 ${
                   isActive ? "text-slate-950 stroke-[2.5]" : "text-amber-400"
                 }`}
               />

@@ -12,26 +12,33 @@
     --neon-emerald: #10b981;
     --neon-cyan: #06b6d4;
     --neon-rose: #f43f5e;
-    font-size: 13.5px;
+    font-size: 16px;
   }
 
   @media (min-width: 640px) {
     :root {
-      font-size: 14px;
+      font-size: 16.5px;
     }
   }
 
   @media (min-width: 1024px) {
     :root {
-      font-size: 14.5px;
+      font-size: 17px;
     }
   }
 
-  body {
+  html, body {
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Optimize touch target responsiveness for mobile browsers */
+  button, a, input, select, textarea {
+    touch-action: manipulation;
   }
 }
 
@@ -177,22 +184,22 @@
   box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25);
 }
 
-/* Micro-Scale Typography Helpers */
+/* Micro-Scale Typography Helpers - Enhanced for High Legibility on Mobile & Desktop */
 .text-nano {
-  font-size: 9px;
-  line-height: 12px;
-  letter-spacing: 0.02em;
+  font-size: 11px;
+  line-height: 15px;
+  letter-spacing: 0.01em;
 }
 
 .text-micro {
-  font-size: 10px;
-  line-height: 13px;
+  font-size: 12.5px;
+  line-height: 17px;
   letter-spacing: 0.01em;
 }
 
 .text-compact {
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 13.5px;
+  line-height: 18px;
 }
 
 /* INCO Signature Yellow Primary Button (Zero Contrast Issues - Deep Black on Vibrant Yellow) */
@@ -333,9 +340,18 @@ body {
   background: rgba(251, 191, 36, 0.7);
 }
 
-/* Mobile Safe Bottom Padding for PWA */
+/* Mobile Safe Viewport Insets for iOS & Android */
 .pb-safe {
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+}
+.pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0.5rem));
+}
+.pl-safe {
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0.5rem));
+}
+.pr-safe {
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0.5rem));
 }
 
 /* Neon Pulse Effect */

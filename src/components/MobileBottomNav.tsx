@@ -95,35 +95,35 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <div className="relative bg-slate-950 text-white border-t border-slate-800 rounded-t-3xl p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <BrandLogo size="xs" theme="yellow" showText={false} animated={false} />
                 <div>
-                  <h3 className="text-sm font-black text-white">
+                  <h3 className="text-base font-black text-white">
                     INCO Smart Tools Hub
                   </h3>
-                  <p className="text-[11px] text-amber-400 font-medium">Quick Launch & Utilities</p>
+                  <p className="text-xs text-amber-400 font-semibold">Quick Launch & Utilities</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsMenuOpen(false)}
-                className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white cursor-pointer"
+                className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Quick Launch Grid */}
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
                   if (onSelectTab) onSelectTab("valuation");
                   else onOpenStockValuation();
                 }}
-                className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-1.5 cursor-pointer transition-colors"
+                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-2 cursor-pointer transition-colors"
               >
-                <PieChart className="w-5 h-5 text-emerald-400" />
-                <span className="text-[11px] font-bold text-white">Valuation</span>
+                <PieChart className="w-6 h-6 text-emerald-400" />
+                <span className="text-xs font-bold text-white">Valuation</span>
               </button>
 
               <button
@@ -132,10 +132,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   if (onSelectTab) onSelectTab("reports");
                   else onOpenSalesReport();
                 }}
-                className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-1.5 cursor-pointer transition-colors"
+                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-2 cursor-pointer transition-colors"
               >
-                <BarChart2 className="w-5 h-5 text-blue-400" />
-                <span className="text-[11px] font-bold text-white">Reports</span>
+                <BarChart2 className="w-6 h-6 text-blue-400" />
+                <span className="text-xs font-bold text-white">Reports</span>
               </button>
 
               <button
@@ -144,10 +144,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   if (onSelectTab) onSelectTab("suppliers");
                   else onOpenQuickRestock();
                 }}
-                className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-1.5 cursor-pointer transition-colors"
+                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-2 cursor-pointer transition-colors"
               >
-                <Truck className="w-5 h-5 text-purple-400" />
-                <span className="text-[11px] font-bold text-white">Suppliers</span>
+                <Truck className="w-6 h-6 text-purple-400" />
+                <span className="text-xs font-bold text-white">Suppliers</span>
               </button>
 
               <button
@@ -155,10 +155,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   setIsMenuOpen(false);
                   onOpenAIAssistant();
                 }}
-                className="p-3 rounded-2xl bg-amber-950/40 border border-amber-500/50 flex flex-col items-center text-center gap-1.5 cursor-pointer"
+                className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/50 flex flex-col items-center text-center gap-2 cursor-pointer"
               >
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                <span className="text-[11px] font-bold text-amber-300">AI Scanner</span>
+                <Sparkles className="w-6 h-6 text-amber-400" />
+                <span className="text-xs font-bold text-amber-300">AI Scanner</span>
               </button>
 
               <button
@@ -166,10 +166,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   setIsMenuOpen(false);
                   onOpenWhatsappOrder();
                 }}
-                className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-1.5 cursor-pointer"
+                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-2 cursor-pointer"
               >
-                <MessageCircle className="w-5 h-5 text-emerald-400" />
-                <span className="text-[11px] font-bold text-white">WhatsApp</span>
+                <MessageCircle className="w-6 h-6 text-emerald-400" />
+                <span className="text-xs font-bold text-white">WhatsApp</span>
               </button>
 
               <button
@@ -177,10 +177,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   setIsMenuOpen(false);
                   onOpenAudit();
                 }}
-                className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-1.5 cursor-pointer"
+                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-2 cursor-pointer"
               >
-                <Boxes className="w-5 h-5 text-indigo-400" />
-                <span className="text-[11px] font-bold text-white">Audit Count</span>
+                <Boxes className="w-6 h-6 text-indigo-400" />
+                <span className="text-xs font-bold text-white">Audit Count</span>
               </button>
 
               <button
@@ -188,10 +188,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   setIsMenuOpen(false);
                   onOpenHistory();
                 }}
-                className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-1.5 cursor-pointer"
+                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-2 cursor-pointer"
               >
-                <History className="w-5 h-5 text-slate-300" />
-                <span className="text-[11px] font-bold text-white">History</span>
+                <History className="w-6 h-6 text-slate-300" />
+                <span className="text-xs font-bold text-white">History</span>
               </button>
 
               <button
@@ -199,10 +199,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   setIsMenuOpen(false);
                   onOpenSettings();
                 }}
-                className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-1.5 cursor-pointer"
+                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-400 flex flex-col items-center text-center gap-2 cursor-pointer"
               >
-                <Settings className="w-5 h-5 text-slate-300" />
-                <span className="text-[11px] font-bold text-white">Settings</span>
+                <Settings className="w-6 h-6 text-slate-300" />
+                <span className="text-xs font-bold text-white">Settings</span>
               </button>
             </div>
 
@@ -213,9 +213,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   setIsMenuOpen(false);
                   onOpenAdminPortal();
                 }}
-                className="w-full py-2.5 px-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all"
+                className="w-full py-3.5 px-5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm flex items-center justify-center gap-2.5 cursor-pointer shadow-md transition-all min-h-[46px]"
               >
-                <Shield className="w-4 h-4 fill-slate-950" />
+                <Shield className="w-5 h-5 fill-slate-950" />
                 <span>SUPER ADMIN DESK</span>
               </button>
             )}
@@ -225,21 +225,21 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       {/* Floating Dark & Yellow Bottom Dock (Mobile Only) */}
       <div className="md:hidden fixed bottom-3 inset-x-3 z-40">
-        <div className="bg-slate-950/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-2 shadow-2xl flex items-center justify-around">
+        <div className="bg-slate-950/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-2.5 shadow-2xl flex items-center justify-around">
           {/* 1. Stock */}
           <button
             onClick={() => {
               sounds.playClick();
               if (onSelectTab) onSelectTab("stock");
             }}
-            className={`flex flex-col items-center gap-0.5 cursor-pointer p-1 ${
+            className={`flex flex-col items-center gap-1 cursor-pointer p-1.5 min-w-[48px] ${
               activeTab === "stock"
                 ? "text-amber-400 font-black"
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            <Boxes className="w-5 h-5" />
-            <span className="text-[10px] font-bold">Stock</span>
+            <Boxes className="w-6 h-6" />
+            <span className="text-xs font-bold">Stock</span>
           </button>
 
           {/* 2. Sale */}
@@ -248,10 +248,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               sounds.playClick();
               onOpenQuickSale();
             }}
-            className="flex flex-col items-center gap-0.5 text-slate-300 hover:text-amber-400 cursor-pointer p-1"
+            className="flex flex-col items-center gap-1 text-slate-300 hover:text-amber-400 cursor-pointer p-1.5 min-w-[48px]"
           >
-            <ShoppingCart className="w-5 h-5" />
-            <span className="text-[10px] font-bold">Sale</span>
+            <ShoppingCart className="w-6 h-6" />
+            <span className="text-xs font-bold">Sale</span>
           </button>
 
           {/* 3. Center Glowing Barcode Scanner */}
@@ -261,10 +261,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               sounds.triggerHaptic(20);
               onOpenScan();
             }}
-            className="-mt-5 w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-400/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            className="-mt-6 w-14 h-14 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-400/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
             title="Scan Barcode"
           >
-            <Scan className="w-6 h-6 stroke-[2.5]" />
+            <Scan className="w-7 h-7 stroke-[2.5]" />
           </button>
 
           {/* 4. Support */}
@@ -273,10 +273,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               sounds.playClick();
               onOpenChat();
             }}
-            className="flex flex-col items-center gap-0.5 text-slate-300 hover:text-amber-400 cursor-pointer p-1"
+            className="flex flex-col items-center gap-1 text-slate-300 hover:text-amber-400 cursor-pointer p-1.5 min-w-[48px]"
           >
-            <Headphones className="w-5 h-5" />
-            <span className="text-[10px] font-bold">Support</span>
+            <Headphones className="w-6 h-6" />
+            <span className="text-xs font-bold">Support</span>
           </button>
 
           {/* 5. Tools */}
@@ -286,14 +286,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               if (onSelectTab) onSelectTab("tools");
               else setIsMenuOpen(true);
             }}
-            className={`flex flex-col items-center gap-0.5 cursor-pointer p-1 ${
+            className={`flex flex-col items-center gap-1 cursor-pointer p-1.5 min-w-[48px] ${
               activeTab === "tools"
                 ? "text-amber-400 font-black"
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            <Menu className="w-5 h-5" />
-            <span className="text-[10px] font-bold">Tools</span>
+            <Menu className="w-6 h-6" />
+            <span className="text-xs font-bold">Tools</span>
           </button>
         </div>
       </div>

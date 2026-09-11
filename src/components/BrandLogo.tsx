@@ -20,12 +20,12 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 }) => {
   // Size metrics
   const sizeMap = {
-    xs: { box: 22, height: 26, width: 80, fontSize: "text-base", iconSize: "w-6 h-6" },
-    sm: { box: 28, height: 32, width: 100, fontSize: "text-lg", iconSize: "w-8 h-8" },
-    md: { box: 34, height: 42, width: 130, fontSize: "text-2xl", iconSize: "w-10 h-10" },
-    lg: { box: 44, height: 54, width: 165, fontSize: "text-3xl", iconSize: "w-14 h-14" },
-    xl: { box: 60, height: 72, width: 220, fontSize: "text-4xl sm:text-5xl", iconSize: "w-20 h-20" },
-    hero: { box: 80, height: 96, width: 280, fontSize: "text-5xl sm:text-6xl", iconSize: "w-24 h-24" },
+    xs: { box: 22, height: 26, width: 80, fontSize: "text-base", iconSize: "w-7 h-7", appIconPx: 28 },
+    sm: { box: 28, height: 32, width: 100, fontSize: "text-lg", iconSize: "w-9 h-9", appIconPx: 36 },
+    md: { box: 34, height: 42, width: 130, fontSize: "text-2xl", iconSize: "w-12 h-12", appIconPx: 48 },
+    lg: { box: 44, height: 54, width: 165, fontSize: "text-3xl", iconSize: "w-16 h-16", appIconPx: 64 },
+    xl: { box: 60, height: 72, width: 220, fontSize: "text-4xl sm:text-5xl", iconSize: "w-20 h-20", appIconPx: 84 },
+    hero: { box: 80, height: 96, width: 280, fontSize: "text-5xl sm:text-6xl", iconSize: "w-28 h-28", appIconPx: 112 },
   };
 
   const current = sizeMap[size];
@@ -114,24 +114,110 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     </motion.svg>
   );
 
-  // App Icon Style (Bright Lime-Yellow Rounded Tile from Inco-App.png)
+  // Official INCO App Icon Style (Exact replica of the user's bright electric lime-yellow squircle app icon)
   if (theme === "yellowAppIcon") {
-    const isSmall = size === "xs" || size === "sm";
     return (
       <div
-        className={`relative ${current.iconSize} rounded-xl sm:rounded-2xl bg-amber-400 p-1.5 sm:p-2 flex flex-col items-center justify-center shadow-md border border-amber-300 font-sans cursor-pointer select-none shrink-0 ${className}`}
-        style={{
-          boxShadow: "0 4px 12px rgba(251, 191, 36, 0.35)",
-        }}
+        className={`relative inline-flex items-center justify-center shrink-0 cursor-pointer select-none ${className}`}
+        style={{ width: current.appIconPx, height: current.appIconPx }}
       >
-        <div className="w-full h-full flex flex-col items-center justify-center relative">
-          <div className={`${isSmall ? "w-4 h-4" : "w-1/2 h-1/2"} -mb-0.5 z-10 flex items-center justify-center`}>
-            <IncoBoxCube sizePx={isSmall ? 16 : current.box * 0.7} animated={animated} />
-          </div>
-          <span className="font-black text-slate-950 tracking-tighter text-[9px] sm:text-xs font-sans lowercase leading-none">
-            inco
-          </span>
-        </div>
+        <svg
+          viewBox="0 0 512 512"
+          width={current.appIconPx}
+          height={current.appIconPx}
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="w-full h-full drop-shadow-md"
+        >
+          <defs>
+            <filter id={`incoTileShadow-${size}`} x="-15%" y="-15%" width="130%" height="130%">
+              <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000000" floodOpacity="0.14" />
+            </filter>
+          </defs>
+
+          {/* Electric Lime-Yellow Rounded App Icon Squircle */}
+          <rect width="512" height="512" rx="116" fill="#E2F800" />
+
+          {/* Centered App Mark */}
+          <g transform="translate(-4, 18)">
+            {/* 3D Isometric Cube */}
+            <g filter={`url(#incoTileShadow-${size})`}>
+              {/* Top Face */}
+              <polygon
+                points="108,124 144,144 108,164 72,144"
+                fill="#E2F800"
+                stroke="#1F2126"
+                strokeWidth="4.5"
+                strokeLinejoin="round"
+              />
+              {/* Left Charcoal Face */}
+              <polygon
+                points="72,144 108,164 108,210 72,190"
+                fill="#1F2126"
+                stroke="#1F2126"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+              {/* Right Charcoal Face */}
+              <polygon
+                points="108,164 144,144 144,190 108,210"
+                fill="#1F2126"
+                stroke="#1F2126"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+              {/* Signature Electric Yellow Checkmark on Right Face */}
+              <path
+                d="M 115 186 L 125 196 L 138 170"
+                fill="none"
+                stroke="#E2F800"
+                strokeWidth="6.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+
+            {/* Letter 'i' Stem */}
+            <rect
+              x="93"
+              y="226"
+              width="30"
+              height="114"
+              rx="12"
+              fill="#1F2126"
+            />
+
+            {/* Letter 'n' */}
+            <path
+              d="M 152 340 L 152 238 M 152 266 C 152 236 172 224 196 224 C 220 224 240 238 240 268 L 240 340"
+              fill="none"
+              stroke="#1F2126"
+              strokeWidth="30"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {/* Letter 'c' */}
+            <path
+              d="M 344 254 C 331 236 313 224 288 224 C 253 224 233 252 233 282 C 233 314 253 340 288 340 C 313 340 331 328 344 310"
+              fill="none"
+              stroke="#1F2126"
+              strokeWidth="30"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {/* Letter 'o' */}
+            <circle
+              cx="410"
+              cy="282"
+              r="44"
+              fill="none"
+              stroke="#1F2126"
+              strokeWidth="30"
+            />
+          </g>
+        </svg>
       </div>
     );
   }

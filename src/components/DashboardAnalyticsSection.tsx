@@ -72,21 +72,21 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
   return (
     <div className="space-y-4 font-sans">
       {/* 3-COLUMN ANALYTICS GRID MATCHING IMAGE 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
         {/* COLUMN 1: INVENTORY STATUS (DONUT RING CHART) */}
-        <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-1 text-xs font-black text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-1.5 text-sm sm:text-base font-black text-slate-900 dark:text-white">
                 <span>Inventory Status</span>
-                <Info className="w-3.5 h-3.5 text-slate-400" />
+                <Info className="w-4 h-4 text-slate-400" />
               </div>
             </div>
 
             {/* Donut Chart & Legends */}
-            <div className="my-3 flex items-center justify-between gap-4">
+            <div className="my-4 flex items-center justify-between gap-5">
               {/* Donut SVG Ring */}
-              <div className="relative w-32 h-32 flex items-center justify-center shrink-0">
+              <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
                 <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                   {/* Track Background */}
                   <circle cx="50" cy="50" r="38" fill="none" stroke="#E2E8F0" strokeWidth="12" />
@@ -138,20 +138,20 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
 
                 {/* Center Ring Stat */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <div className="text-lg font-black text-slate-950 dark:text-white leading-none">
+                  <div className="text-xl font-black text-slate-950 dark:text-white leading-none">
                     {totalItemsCount.toLocaleString()}
                   </div>
-                  <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
                     Total Items
                   </div>
                 </div>
               </div>
 
               {/* Status Chips */}
-              <div className="space-y-1.5 text-xs flex-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <div className="space-y-2 text-xs sm:text-sm flex-1">
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                     In Stock
                   </span>
                   <span className="font-bold text-slate-900 dark:text-white">
@@ -159,9 +159,9 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
                     Low Stock
                   </span>
                   <span className="font-bold text-slate-900 dark:text-white">
@@ -169,9 +169,9 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
                     Out of Stock
                   </span>
                   <span className="font-bold text-slate-900 dark:text-white">
@@ -179,9 +179,9 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
                     Over Stock
                   </span>
                   <span className="font-bold text-slate-900 dark:text-white">
@@ -192,53 +192,53 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
             </div>
           </div>
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 text-right">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 text-right">
             <button
               onClick={() => {
                 sounds.playClick();
                 onOpenReport();
               }}
-              className="text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-amber-500 flex items-center gap-1 cursor-pointer ml-auto"
+              className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 hover:text-amber-500 flex items-center gap-1 cursor-pointer ml-auto min-h-[36px]"
             >
               <span>View Full Report</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* COLUMN 2: TOP SELLING ITEMS */}
-        <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-1 text-xs font-black text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-1.5 text-sm sm:text-base font-black text-slate-900 dark:text-white">
                 <span>Top Selling Items</span>
-                <Info className="w-3.5 h-3.5 text-slate-400" />
+                <Info className="w-4 h-4 text-slate-400" />
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                 This Month ⌄
               </span>
             </div>
 
             {/* List with product image avatar, title, units, revenue */}
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 my-2 space-y-1">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 my-2 space-y-1.5">
               {topSellingList.map((item, idx) => (
-                <div key={item.id} className="py-1.5 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0">
-                      <Package className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                <div key={item.id} className="py-2 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0">
+                      <Package className="w-5 h-5 text-slate-600 dark:text-slate-300" />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                         {item.name}
                       </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                      <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                         {(item.quantity * 2 + 150 + idx * 80).toLocaleString()} units
                       </div>
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-black text-slate-900 dark:text-white">
+                    <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
                       {settings.currencySymbol}
                       {(item.sellingPrice * (item.quantity * 2 + 150 + idx * 80) * 0.1).toFixed(2)}
                     </div>
@@ -248,42 +248,42 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
             </div>
           </div>
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-right">
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-right">
             <button
               onClick={() => {
                 sounds.playClick();
                 onOpenReport();
               }}
-              className="text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-amber-500 flex items-center gap-1 cursor-pointer ml-auto"
+              className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 hover:text-amber-500 flex items-center gap-1 cursor-pointer ml-auto min-h-[36px]"
             >
               <span>View All Items</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* COLUMN 3: SALES OVERVIEW (SPLINE CHART) */}
-        <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div className="text-xs font-black text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
                 Sales Overview
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                 This Month ⌄
               </span>
             </div>
 
             {/* Total Sales & Margin Badge */}
-            <div className="my-2">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <div className="my-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Total Sales
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white">
+              <div className="flex items-center gap-2.5 mt-1">
+                <span className="text-2xl sm:text-3xl font-black text-slate-950 dark:text-white">
                   {settings.currencySymbol} 4,326.50
                 </span>
-                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded-md">
+                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-lg">
                   ↑ 12.5% vs last month
                 </span>
               </div>
@@ -291,7 +291,7 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
 
             {/* Spline Area Chart */}
             <div className="relative pt-2">
-              <svg className="w-full h-24 text-blue-500 overflow-visible" viewBox="0 0 300 100">
+              <svg className="w-full h-28 text-blue-500 overflow-visible" viewBox="0 0 300 100">
                 <defs>
                   <linearGradient id="salesSplineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.35" />
@@ -316,7 +316,7 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
               </svg>
 
               {/* Date Markers */}
-              <div className="flex items-center justify-between text-[9px] text-slate-500 dark:text-slate-400 font-mono pt-1">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-mono pt-1">
                 <span>1 May</span>
                 <span>8 May</span>
                 <span>15 May</span>

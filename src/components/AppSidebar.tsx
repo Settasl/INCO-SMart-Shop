@@ -60,31 +60,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     userProfile?.subscription?.plan === "INCO Pro AI";
 
   return (
-    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-4 flex flex-col justify-between hidden md:flex shrink-0 select-none z-20">
+    <aside className="w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col justify-between hidden md:flex shrink-0 select-none z-20">
       {/* Top Logo & Branding */}
       <div>
-        <div className="flex items-center gap-2.5 px-2 py-1 mb-6">
+        <div className="flex items-center gap-3 px-2 py-1 mb-6">
           <BrandLogo size="md" />
-          <span className="text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-mono">
+          <span className="text-[10px] uppercase tracking-wider font-black px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-mono">
             SMART-SHOP
           </span>
         </div>
 
         {/* Navigation Items */}
-        <nav className="space-y-1">
+        <nav className="space-y-1.5">
           {/* Dashboard */}
           <button
             onClick={() => {
               sounds.playClick();
               setActiveView("dashboard");
             }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold transition-all cursor-pointer ${
               activeView === "dashboard"
                 ? "bg-amber-400 text-slate-950 shadow-sm font-black"
                 : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white"
             }`}
           >
-            <LayoutDashboard className="w-4 h-4" />
+            <LayoutDashboard className="w-5 h-5" />
             <span>Dashboard</span>
           </button>
 
@@ -94,13 +94,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               setActiveView("stock");
             }}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold transition-all cursor-pointer ${
               activeView === "stock"
                 ? "bg-amber-400 text-slate-950 shadow-sm font-black"
                 : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white"
             }`}
           >
-            <Boxes className="w-4 h-4" />
+            <Boxes className="w-5 h-5" />
             <span>Stock</span>
           </button>
 
@@ -110,9 +110,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenQuickSale();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
-            <ShoppingCart className="w-4 h-4" />
+            <ShoppingCart className="w-5 h-5" />
             <span>Sales</span>
           </button>
 
@@ -122,9 +122,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenQuickRestock();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
-            <Truck className="w-4 h-4" />
+            <Truck className="w-5 h-5" />
             <span>Purchase</span>
           </button>
 
@@ -134,9 +134,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenStockValuation();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
-            <PieChart className="w-4 h-4" />
+            <PieChart className="w-5 h-5" />
             <span>Valuation</span>
           </button>
 
@@ -146,9 +146,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenSalesReport();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
-            <BarChart2 className="w-4 h-4" />
+            <BarChart2 className="w-5 h-5" />
             <span>Reports</span>
           </button>
 
@@ -159,9 +159,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               if (onOpenSuppliers) onOpenSuppliers();
               else onOpenQuickRestock();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
-            <Users className="w-4 h-4" />
+            <Users className="w-5 h-5" />
             <span>Suppliers</span>
           </button>
 
@@ -171,22 +171,22 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenSettings();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="w-5 h-5" />
             <span>Settings</span>
           </button>
         </nav>
       </div>
 
       {/* Bottom Area: Upgrade Card & Store Manager Card */}
-      <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+      <div className="space-y-3.5 pt-4 border-t border-slate-100 dark:border-slate-800/80">
         {/* Business Plan Card Matching Image 1 */}
-        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-left">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-left">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Business Plan
           </div>
-          <div className="text-xs font-black text-slate-900 dark:text-white mt-0.5 flex items-center gap-1.5">
+          <div className="text-sm font-black text-slate-900 dark:text-white mt-1 flex items-center gap-2">
             <span>INCO Master Plan</span>
             <span>🚀</span>
           </div>
@@ -195,7 +195,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenSubscription();
             }}
-            className="w-full mt-2.5 py-1.5 px-3 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+            className="w-full mt-3 py-2 px-4 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all cursor-pointer min-h-[38px]"
           >
             {isProUser ? "Manage Plan" : "Upgrade Plan"}
           </button>
@@ -207,17 +207,17 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             sounds.playClick();
             onOpenProfile();
           }}
-          className="w-full p-2 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-xs"
+          className="w-full p-2.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-xs"
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
               {userProfile?.displayName ? userProfile.displayName.charAt(0).toUpperCase() : "M"}
             </div>
             <div className="text-left min-w-0">
-              <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+              <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                 {userProfile?.displayName || "Store Manager"}
               </div>
-              <div className="text-[10px] text-slate-400 truncate">
+              <div className="text-xs text-slate-400 truncate">
                 {isSuperAdmin ? "Super Admin" : "Store Admin"}
               </div>
             </div>
@@ -232,9 +232,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenAdminPortal();
             }}
-            className="w-full py-2 px-3 bg-slate-950 text-amber-400 border border-amber-400/50 rounded-xl text-xs font-black flex items-center justify-center gap-2 hover:bg-black transition-all cursor-pointer shadow-md"
+            className="w-full py-3 px-4 bg-slate-950 text-amber-400 border border-amber-400/50 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 hover:bg-black transition-all cursor-pointer shadow-md min-h-[44px]"
           >
-            <Shield className="w-3.5 h-3.5 fill-amber-400" />
+            <Shield className="w-4 h-4 fill-amber-400" />
             <span>ADMIN BACKEND</span>
           </button>
         )}

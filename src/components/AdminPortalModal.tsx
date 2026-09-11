@@ -41,6 +41,7 @@ import {
   getAdminMasterPassword,
   setAdminMasterPassword,
 } from "../lib/userRegistry";
+import { BrandLogo } from "./BrandLogo";
 
 interface AdminPortalModalProps {
   isOpen: boolean;
@@ -184,11 +185,37 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     }
   }, [lockoutTimer]);
 
-  // Auto-refresh users when unlocked
+  // Auto-refresh users when unlocked and listen for live registration events
   useEffect(() => {
-    if (isOpen && isUnlocked && onRefreshUsers) {
+    if (!isOpen || !isUnlocked) return;
+
+    // Trigger initial refresh
+    if (onRefreshUsers) {
       onRefreshUsers();
     }
+
+    // Immediately refresh whenever a new user registers or accounts are updated
+    const handleUsersUpdated = () => {
+      if (onRefreshUsers) {
+        onRefreshUsers();
+      }
+    };
+
+    window.addEventListener("inco:users-updated", handleUsersUpdated);
+    window.addEventListener("storage", handleUsersUpdated);
+
+    // Live background polling every 5 seconds while Admin Portal is active
+    const livePoll = setInterval(() => {
+      if (onRefreshUsers) {
+        onRefreshUsers();
+      }
+    }, 5000);
+
+    return () => {
+      window.removeEventListener("inco:users-updated", handleUsersUpdated);
+      window.removeEventListener("storage", handleUsersUpdated);
+      clearInterval(livePoll);
+    };
   }, [isOpen, isUnlocked, onRefreshUsers]);
 
   if (!isOpen) return null;
@@ -552,10 +579,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
             <X className="w-4 h-4" />
           </button>
 
-          {/* Animated Gold Shield Emblem */}
-          <div className="relative mx-auto flex items-center justify-center pt-2">
-            <div className="w-16 h-16 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-400/30">
-              <Shield className="w-8 h-8 fill-slate-950" />
+          {/* Official INCO App Icon in the Admin Sign In Panel */}
+          <div className="relative mx-auto flex flex-col items-center justify-center pt-2 gap-2">
+            <div className="relative p-1 rounded-2xl bg-slate-950 border border-amber-400/40 shadow-xl shadow-amber-400/25">
+              <BrandLogo size="lg" theme="yellowAppIcon" animated={false} />
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-800 border border-amber-400/30 text-amber-300 text-[10px] font-mono font-bold shadow-xs">
+              <Lock className="w-3 h-3 text-amber-400" />
+              <span>INCO Root Admin Console</span>
             </div>
           </div>
 
@@ -649,50 +680,50 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     >
       <div className="bg-slate-950 border border-amber-400/40 rounded-2xl w-full max-w-6xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden my-auto">
         {/* Top Command Header Bar */}
-        <div className="p-3.5 sm:p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-400 text-slate-950 rounded-xl font-bold shadow-md">
-              <Shield className="w-5 h-5 fill-slate-950" />
+        <div className="p-4 sm:p-5 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="p-1 bg-slate-900 border border-amber-400/40 rounded-2xl shadow-md shrink-0">
+              <BrandLogo size="sm" theme="yellowAppIcon" animated={false} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 id="admin-portal-title" className="text-sm sm:text-base font-black text-white">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 id="admin-portal-title" className="text-base sm:text-lg font-black text-white tracking-tight">
                   INCO Smart Shop Super Admin Console
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
                   MASTER ROOT
                 </span>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-400 text-[9px] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   99.98% SLA
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 font-medium">
+              <p className="text-xs sm:text-sm text-slate-300 font-medium mt-0.5">
                 Authorized Root: <strong className="text-amber-400 font-mono">{SUPER_ADMIN_EMAIL}</strong> • Full Control Over Merchants, KYC, $4.99/mo Pro, & Security
               </p>
             </div>
           </div>
 
           {/* Header Controls: Sync Database, Lock Session & Close */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={handleManualSync}
               disabled={isSyncingCloud}
-              className="px-3 py-1.5 rounded-xl btn-inco-yellow text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-60"
+              className="px-4 py-2.5 rounded-xl btn-inco-yellow text-slate-950 font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-60 min-h-[40px]"
               title="Synchronize all newly registered users and telemetry from backend database"
             >
-              <RefreshCw className={`w-3.5 h-3.5 stroke-[2.5] ${isSyncingCloud ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-4 h-4 stroke-[2.5] ${isSyncingCloud ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">{isSyncingCloud ? "Syncing..." : "Sync Users"}</span>
             </button>
 
             <button
               type="button"
               onClick={handleLockSession}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer border border-slate-700 min-h-[40px]"
               title="Lock Admin Session"
             >
-              <Lock className="w-3.5 h-3.5" />
+              <Lock className="w-4 h-4" />
               <span className="hidden sm:inline">Lock Session</span>
             </button>
 
@@ -702,27 +733,27 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                 sounds.playClick();
                 onClose();
               }}
-              className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+              className="text-slate-400 hover:text-white p-2.5 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
             >
-              <X className="w-5 h-5" />
+              <X className="w-6 h-6" />
             </button>
           </div>
         </div>
 
         {/* Tab Navigation Ribbon */}
-        <div className="flex items-center gap-1 overflow-x-auto p-2 bg-slate-950/80 border-b border-slate-800 shrink-0 scrollbar-none">
+        <div className="flex items-center gap-1.5 overflow-x-auto p-2.5 bg-slate-950/80 border-b border-slate-800 shrink-0 scrollbar-none">
           <button
             onClick={() => {
               sounds.playClick();
               setActiveTab("overview");
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer min-h-[38px] ${
               activeTab === "overview"
                 ? "bg-amber-400 text-slate-950 shadow-sm"
                 : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <Activity className="w-3.5 h-3.5" />
+            <Activity className="w-4 h-4" />
             <span>Overview & Telemetry</span>
           </button>
 
@@ -731,13 +762,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("users");
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer min-h-[38px] ${
               activeTab === "users"
                 ? "bg-amber-400 text-slate-950 shadow-sm"
                 : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <Users className="w-3.5 h-3.5" />
+            <Users className="w-4 h-4" />
             <span>Merchants Registry ({allUsers.length})</span>
           </button>
 
@@ -746,16 +777,16 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("payments");
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer min-h-[38px] ${
               activeTab === "payments"
                 ? "bg-amber-400 text-slate-950 shadow-sm"
                 : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <CreditCard className="w-3.5 h-3.5" />
+            <CreditCard className="w-4 h-4" />
             <span>Pro Subscriptions ($4.99/mo)</span>
             {pendingPayments.length > 0 && (
-              <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+              <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-xs font-black flex items-center justify-center">
                 {pendingPayments.length}
               </span>
             )}
@@ -766,16 +797,16 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("verifications");
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer min-h-[38px] ${
               activeTab === "verifications"
                 ? "bg-amber-400 text-slate-950 shadow-sm"
                 : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <Award className="w-3.5 h-3.5" />
+            <Award className="w-4 h-4" />
             <span>KYC Verification Desk</span>
             {pendingVerifications.length > 0 && (
-              <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center justify-center">
+              <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 text-xs font-black flex items-center justify-center">
                 {pendingVerifications.length}
               </span>
             )}
@@ -786,13 +817,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("announcements");
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer min-h-[38px] ${
               activeTab === "announcements"
                 ? "bg-amber-400 text-slate-950 shadow-sm"
                 : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <Megaphone className="w-3.5 h-3.5" />
+            <Megaphone className="w-4 h-4" />
             <span>Broadcast Alerts</span>
           </button>
 
@@ -801,13 +832,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("audit");
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer min-h-[38px] ${
               activeTab === "audit"
                 ? "bg-amber-400 text-slate-950 shadow-sm"
                 : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <Shield className="w-3.5 h-3.5" />
+            <Shield className="w-4 h-4" />
             <span>Audit Vault</span>
           </button>
 
@@ -816,13 +847,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               sounds.playClick();
               setActiveTab("security");
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer min-h-[38px] ${
               activeTab === "security"
                 ? "bg-amber-400 text-slate-950 shadow-sm"
                 : "text-slate-300 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <KeyRound className="w-3.5 h-3.5" />
+            <KeyRound className="w-4 h-4" />
             <span>Password & Security</span>
           </button>
         </div>
@@ -833,49 +864,49 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
           {activeTab === "overview" && (
             <div className="space-y-4 animate-in fade-in duration-150">
               {/* KPI Stat Cards Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
-                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 shadow-md">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-bold uppercase tracking-wider">
                     <span>Registered Stores</span>
-                    <Users className="w-4 h-4 text-amber-400" />
+                    <Users className="w-5 h-5 text-amber-400" />
                   </div>
-                  <div className="text-2xl font-black text-white mt-1">
+                  <div className="text-3xl font-black text-white mt-1.5">
                     {allUsers.length}
                   </div>
-                  <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
+                  <div className="text-xs text-emerald-400 font-semibold mt-1">
                     +100% cloud connected
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
-                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+                <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 shadow-md">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-bold uppercase tracking-wider">
                     <span>Active Pro AI Stores</span>
-                    <Zap className="w-4 h-4 text-amber-400" />
+                    <Zap className="w-5 h-5 text-amber-400" />
                   </div>
-                  <div className="text-2xl font-black text-amber-400 mt-1">
+                  <div className="text-3xl font-black text-amber-400 mt-1.5">
                     {allUsers.filter((u) => u.subscription?.plan === "INCO Pro AI").length}
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">$4.99/mo Plan Tier</div>
+                  <div className="text-xs text-slate-400 mt-1 font-medium">$4.99/mo Plan Tier</div>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
-                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+                <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 shadow-md">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-bold uppercase tracking-wider">
                     <span>Verified KYC Merchants</span>
-                    <Award className="w-4 h-4 text-emerald-400" />
+                    <Award className="w-5 h-5 text-emerald-400" />
                   </div>
-                  <div className="text-2xl font-black text-emerald-400 mt-1">
+                  <div className="text-3xl font-black text-emerald-400 mt-1.5">
                     {allUsers.filter((u) => u.isVerified).length}
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Golden ID Certified</div>
+                  <div className="text-xs text-slate-400 mt-1 font-medium">Golden ID Certified</div>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
-                  <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase">
+                <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 shadow-md">
+                  <div className="flex items-center justify-between text-slate-400 text-xs font-bold uppercase tracking-wider">
                     <span>System Threat Index</span>
-                    <Shield className="w-4 h-4 text-blue-400" />
+                    <Shield className="w-5 h-5 text-blue-400" />
                   </div>
-                  <div className="text-2xl font-black text-white mt-1">0.00%</div>
-                  <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
+                  <div className="text-3xl font-black text-white mt-1.5">0.00%</div>
+                  <div className="text-xs text-emerald-400 font-semibold mt-1">
                     Zero breaches detected
                   </div>
                 </div>
@@ -884,28 +915,28 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               {/* Real-time Telemetry Feed & Quick Master Actions */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Live Store Telemetry */}
-                <div className="lg:col-span-2 p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="lg:col-span-2 p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3.5 shadow-md">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <HeartPulse className="w-4 h-4 text-rose-400 animate-pulse" />
-                      <h3 className="text-xs sm:text-sm font-black text-white">
+                    <div className="flex items-center gap-2.5">
+                      <HeartPulse className="w-5 h-5 text-rose-400 animate-pulse" />
+                      <h3 className="text-sm sm:text-base font-black text-white">
                         Live Store Operations & Activity Stream
                       </h3>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400">
+                    <span className="text-xs font-mono text-slate-400 font-semibold">
                       Real-time Feed
                     </span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {telemetryLogs.map((log) => (
                       <div
                         key={log.id}
-                        className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs"
+                        className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs sm:text-sm"
                       >
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-3">
                           <span
-                            className={`w-2 h-2 rounded-full ${
+                            className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                               log.type === "sale"
                                 ? "bg-emerald-400"
                                 : log.type === "restock"
@@ -916,37 +947,37 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                             }`}
                           />
                           <div>
-                            <span className="font-bold text-white mr-1.5">{log.store}</span>
-                            <span className="text-slate-300">{log.action}</span>
+                            <span className="font-bold text-white mr-2">{log.store}</span>
+                            <span className="text-slate-300 font-medium">{log.action}</span>
                           </div>
                         </div>
-                        <span className="text-[10px] text-slate-400 font-mono">{log.time}</span>
+                        <span className="text-xs text-slate-400 font-mono shrink-0">{log.time}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Quick Master Root Tools */}
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                  <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-amber-400" />
+                <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3.5 shadow-md">
+                  <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2.5">
+                    <Sliders className="w-5 h-5 text-amber-400" />
                     <span>Quick Admin Controls</span>
                   </h3>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <button
                       type="button"
                       onClick={() => {
                         sounds.playSuccess();
                         onShowToast("Ecosystem backup JSON exported!", "success");
                       }}
-                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors"
+                      className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors min-h-[44px]"
                     >
-                      <span className="flex items-center gap-2">
-                        <Download className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="flex items-center gap-2.5">
+                        <Download className="w-4 h-4 text-amber-400" />
                         <span>Export Full System Backup</span>
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">JSON</span>
+                      <span className="text-xs text-slate-400 font-mono font-bold">JSON</span>
                     </button>
 
                     <button
@@ -955,13 +986,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                         sounds.playClick();
                         setActiveTab("announcements");
                       }}
-                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors"
+                      className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors min-h-[44px]"
                     >
-                      <span className="flex items-center gap-2">
-                        <Megaphone className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="flex items-center gap-2.5">
+                        <Megaphone className="w-4 h-4 text-amber-400" />
                         <span>Send Global Store Alert</span>
                       </span>
-                      <span className="text-[10px] text-amber-400 font-bold">Broadcast</span>
+                      <span className="text-xs text-amber-400 font-bold">Broadcast</span>
                     </button>
 
                     <button
@@ -970,13 +1001,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                         sounds.playClick();
                         setActiveTab("security");
                       }}
-                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors"
+                      className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-between cursor-pointer transition-colors min-h-[44px]"
                     >
-                      <span className="flex items-center gap-2">
-                        <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="flex items-center gap-2.5">
+                        <KeyRound className="w-4 h-4 text-amber-400" />
                         <span>Change Admin Password</span>
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">Root</span>
+                      <span className="text-xs text-slate-400 font-mono font-bold">Root</span>
                     </button>
                   </div>
                 </div>
@@ -988,18 +1019,18 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
           {activeTab === "users" && (
             <div className="space-y-4 animate-in fade-in duration-150">
               {/* Search & Filter Ribbon */}
-              <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
                 <div className="relative flex-1">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search by store name, owner, phone or email..."
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400"
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-2xl text-sm font-medium text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400 min-h-[44px]"
                   />
                 </div>
 
-                <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
                   {(["all", "active", "pro", "verified", "suspended", "blocked", "appeals"] as const).map(
                     (filterKey) => (
                       <button
@@ -1008,10 +1039,10 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                           sounds.playClick();
                           setUserFilter(filterKey);
                         }}
-                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-colors cursor-pointer shrink-0 ${
+                        className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold capitalize transition-colors cursor-pointer shrink-0 min-h-[38px] ${
                           userFilter === filterKey
-                            ? "bg-amber-400 text-slate-950 font-black"
-                            : "bg-slate-950 text-slate-300 hover:bg-slate-800"
+                            ? "bg-amber-400 text-slate-950 font-black shadow-xs"
+                            : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800"
                         }`}
                       >
                         {filterKey}
@@ -1022,14 +1053,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
               </div>
 
               {/* Sync Status & Quick Counter Bar */}
-              <div className="flex items-center justify-between px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-slate-300 font-medium">
-                    Showing <strong className="text-amber-400 font-bold">{filteredUsers.length}</strong> of <strong className="text-white font-bold">{allUsers.length}</strong> registered merchants
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between p-3.5 bg-slate-950/90 border border-slate-800 rounded-2xl text-sm">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="text-slate-200 font-medium">
+                    Showing <strong className="text-amber-400 font-black">{filteredUsers.length}</strong> of <strong className="text-white font-black">{allUsers.length}</strong> registered merchants
                   </span>
-                  <span className="hidden sm:inline text-[10px] text-slate-400 border-l border-slate-700 pl-2">
-                    Last sync: {lastSyncTime}
+                  <span className="hidden md:inline text-xs text-slate-400 border-l border-slate-700 pl-2.5">
+                    Live Auto-Refreshed: {lastSyncTime}
                   </span>
                 </div>
 
@@ -1037,61 +1068,61 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                   type="button"
                   onClick={handleManualSync}
                   disabled={isSyncingCloud}
-                  className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-700 text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 min-h-[38px] self-start sm:self-auto"
                 >
-                  <RefreshCw className={`w-3 h-3 ${isSyncingCloud ? "animate-spin" : ""}`} />
+                  <RefreshCw className={`w-4 h-4 ${isSyncingCloud ? "animate-spin" : ""}`} />
                   <span>{isSyncingCloud ? "Syncing..." : "Refresh Users List"}</span>
                 </button>
               </div>
 
               {/* Merchants Table / Cards */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-slate-900/90 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead className="bg-slate-900/90 text-xs uppercase font-extrabold text-slate-400 border-b border-slate-800">
                       <tr>
-                        <th className="p-3">Merchant / Store</th>
-                        <th className="p-3">Contact</th>
-                        <th className="p-3">Plan Tier</th>
-                        <th className="p-3">Status & Badges</th>
-                        <th className="p-3 text-right">Actions</th>
+                        <th className="p-4">Merchant / Store</th>
+                        <th className="p-4">Contact</th>
+                        <th className="p-4">Plan Tier</th>
+                        <th className="p-4">Status & Badges</th>
+                        <th className="p-4 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
+                    <tbody className="divide-y divide-slate-800/70">
                       {filteredUsers.map((user) => {
                         const isUserAdmin = user.identifier.toLowerCase() === SUPER_ADMIN_EMAIL;
                         return (
-                          <tr key={user.id} className="hover:bg-slate-900/50 transition-colors">
-                            <td className="p-3">
-                              <div className="flex items-center gap-2.5">
+                          <tr key={user.id} className="hover:bg-slate-900/60 transition-colors">
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
                                 <img
                                   src={user.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80"}
                                   alt=""
-                                  className="w-8 h-8 rounded-full object-cover border border-slate-700"
+                                  className="w-10 h-10 rounded-full object-cover border border-slate-700 shrink-0"
                                 />
                                 <div>
-                                  <div className="font-bold text-white flex items-center gap-1.5">
+                                  <div className="font-bold text-white flex items-center gap-2 text-sm sm:text-base">
                                     <span>{user.displayName || "Store Owner"}</span>
                                     {user.isVerified && (
                                       <span title="KYC Verified">
-                                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                                        <Award className="w-4 h-4 text-amber-400" />
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[11px] text-slate-400">
+                                  <div className="text-xs sm:text-sm text-slate-400 font-medium">
                                     {user.storeName || "Retail Kiosk"}
                                   </div>
                                 </div>
                               </div>
                             </td>
 
-                            <td className="p-3 font-mono text-[11px] text-slate-300">
+                            <td className="p-4 font-mono text-xs sm:text-sm text-slate-300">
                               {user.identifier}
                             </td>
 
-                            <td className="p-3">
+                            <td className="p-4">
                               <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                                className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase ${
                                   user.subscription?.plan === "INCO Pro AI"
                                     ? "bg-amber-400/20 text-amber-400 border border-amber-400/40"
                                     : "bg-slate-800 text-slate-400"
@@ -1101,22 +1132,22 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                               </span>
                             </td>
 
-                            <td className="p-3">
+                            <td className="p-4">
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
                                   user.accountStatus === "active"
-                                    ? "bg-emerald-950 text-emerald-400 border border-emerald-500/30"
+                                    ? "bg-emerald-950 text-emerald-400 border border-emerald-500/40"
                                     : user.accountStatus === "suspended"
-                                    ? "bg-amber-950 text-amber-400 border border-amber-500/30"
-                                    : "bg-rose-950 text-rose-400 border border-rose-500/30"
+                                    ? "bg-amber-950 text-amber-400 border border-amber-500/40"
+                                    : "bg-rose-950 text-rose-400 border border-rose-500/40"
                                 }`}
                               >
                                 {user.accountStatus || "active"}
                               </span>
                             </td>
 
-                            <td className="p-3 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
                                 {/* Inspect User Button */}
                                 <button
                                   type="button"
@@ -1124,10 +1155,10 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                     sounds.playClick();
                                     setInspectedUser(user);
                                   }}
-                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
                                   title="Inspect Merchant Profile"
                                 >
-                                  <Eye className="w-3.5 h-3.5" />
+                                  <Eye className="w-4 h-4" />
                                 </button>
 
                                 {/* Toggle KYC Badge */}
@@ -1135,14 +1166,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleToggleKYC(user.id, user.isVerified, user.displayName)}
-                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                    className={`p-2 rounded-xl transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center ${
                                       user.isVerified
-                                        ? "bg-amber-400/20 text-amber-400 hover:bg-amber-400/30"
+                                        ? "bg-amber-400/20 text-amber-400 hover:bg-amber-400/30 border border-amber-400/40"
                                         : "bg-slate-800 hover:bg-slate-700 text-slate-400"
                                     }`}
                                     title={user.isVerified ? "Revoke KYC Badge" : "Grant Golden KYC Badge"}
                                   >
-                                    <Award className="w-3.5 h-3.5" />
+                                    <Award className="w-4 h-4" />
                                   </button>
                                 )}
 
@@ -1157,14 +1188,14 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                         user.displayName
                                       )
                                     }
-                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                    className={`p-2 rounded-xl transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center ${
                                       user.subscription?.plan === "INCO Pro AI"
                                         ? "bg-amber-400 text-slate-950 hover:bg-amber-300 font-bold"
                                         : "bg-slate-800 hover:bg-slate-700 text-slate-400"
                                     }`}
                                     title="Toggle $4.99/mo Pro Tier"
                                   >
-                                    <Zap className="w-3.5 h-3.5" />
+                                    <Zap className="w-4 h-4" />
                                   </button>
                                 )}
 
@@ -1173,10 +1204,10 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleActivateUser(user.id, user.displayName)}
-                                    className="p-1.5 rounded-lg bg-emerald-950 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/40 transition-colors cursor-pointer"
+                                    className="p-2 rounded-xl bg-emerald-950 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/40 transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
                                     title="Activate & Unblock"
                                   >
-                                    <UserCheck className="w-3.5 h-3.5" />
+                                    <UserCheck className="w-4 h-4" />
                                   </button>
                                 ) : !isUserAdmin ? (
                                   <button
@@ -1188,10 +1219,10 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                         targetName: user.displayName,
                                       });
                                     }}
-                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                                    className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
                                     title="Suspend Merchant"
                                   >
-                                    <UserX className="w-3.5 h-3.5" />
+                                    <UserX className="w-4 h-4" />
                                   </button>
                                 ) : null}
                               </div>
@@ -1211,51 +1242,51 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
             <div className="space-y-4 animate-in fade-in duration-150">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-black text-white">
+                  <h3 className="text-base sm:text-lg font-black text-white">
                     INCO Pro AI ($4.99/mo) Subscription Review Desk
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs sm:text-sm text-slate-300 font-medium mt-0.5">
                     Verify Mobile Money (M-Pesa/MTN), Bank Transfer, or Card receipts to grant full Pro AI access.
                   </p>
                 </div>
               </div>
 
               {pendingPayments.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-2">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                  <div className="text-sm font-bold text-white">All Subscription Requests Cleared!</div>
-                  <p className="text-xs text-slate-400">No pending $4.99/mo payment approvals in queue.</p>
+                <div className="p-10 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-3 shadow-md">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                  <div className="text-base font-black text-white">All Subscription Requests Cleared!</div>
+                  <p className="text-xs sm:text-sm text-slate-400">No pending $4.99/mo payment approvals in queue.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   {pendingPayments.map((req) => (
                     <div
                       key={req.id}
-                      className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                      className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white text-sm">{req.userName}</span>
-                          <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-400 text-[10px] font-black uppercase">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="font-bold text-white text-base">{req.userName}</span>
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-400/20 text-amber-400 text-xs font-black uppercase">
                             {req.planName} (${req.amount})
                           </span>
                         </div>
-                        <div className="text-xs text-slate-300 font-mono">
+                        <div className="text-xs sm:text-sm text-slate-300 font-mono">
                           Method: {req.paymentMethod} • Ref: {req.transactionRef || "N/A"}
                         </div>
-                        <div className="text-[10px] text-slate-500">
+                        <div className="text-xs text-slate-400">
                           Submitted: {new Date(req.submittedAt || Date.now()).toLocaleString()}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
                         {req.proofUrl && (
                           <button
                             type="button"
                             onClick={() => setSelectedProofImage(req.proofUrl || null)}
-                            className="px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            className="px-3.5 py-2.5 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer min-h-[40px]"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-4 h-4" />
                             <span>View Proof</span>
                           </button>
                         )}
@@ -1267,7 +1298,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                             onApprovePayment(req.id);
                             onShowToast(`Approved Pro subscription for ${req.userName}!`, "success");
                           }}
-                          className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition-colors cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-colors cursor-pointer min-h-[40px]"
                         >
                           Approve Pro ($4.99)
                         </button>
@@ -1281,7 +1312,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                               targetName: req.userName,
                             });
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-400 font-bold text-xs border border-rose-500/40 transition-colors cursor-pointer"
+                          className="px-4 py-2.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-400 font-bold text-xs sm:text-sm border border-rose-500/40 transition-colors cursor-pointer min-h-[40px]"
                         >
                           Reject
                         </button>
@@ -1298,48 +1329,48 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
             <div className="space-y-4 animate-in fade-in duration-150">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-black text-white">
+                  <h3 className="text-base sm:text-lg font-black text-white">
                     Merchant KYC & National ID Verification Queue
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs sm:text-sm text-slate-300 font-medium mt-0.5">
                     Verify government IDs and passports to award Golden Verified Merchant badges.
                   </p>
                 </div>
               </div>
 
               {pendingVerifications.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-2">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                  <div className="text-sm font-bold text-white">All KYC Submissions Cleared!</div>
-                  <p className="text-xs text-slate-400">No pending merchant ID documents in queue.</p>
+                <div className="p-10 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-3 shadow-md">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                  <div className="text-base font-black text-white">All KYC Submissions Cleared!</div>
+                  <p className="text-xs sm:text-sm text-slate-400">No pending merchant ID documents in queue.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   {pendingVerifications.map((kyc) => (
                     <div
                       key={kyc.id}
-                      className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                      className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white text-sm">{kyc.legalName || kyc.userName}</span>
-                          <span className="px-2 py-0.5 rounded-md bg-blue-950 text-blue-400 text-[10px] font-bold">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="font-bold text-white text-base">{kyc.legalName || kyc.userName}</span>
+                          <span className="px-2.5 py-1 rounded-lg bg-blue-950 text-blue-400 text-xs font-bold border border-blue-500/30">
                             {kyc.idType} ({kyc.idNumber})
                           </span>
                         </div>
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs sm:text-sm text-slate-300">
                           Submitted: {new Date(kyc.submittedAt || Date.now()).toLocaleDateString()}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
                         {(kyc.idDocUrl || kyc.passportPhotoUrl) && (
                           <button
                             type="button"
                             onClick={() => setSelectedProofImage(kyc.idDocUrl || kyc.passportPhotoUrl || null)}
-                            className="px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            className="px-3.5 py-2.5 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer min-h-[40px]"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-4 h-4" />
                             <span>View ID Doc</span>
                           </button>
                         )}
@@ -1351,7 +1382,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                             onApproveVerification(kyc.id);
                             onShowToast(`Approved KYC for ${kyc.legalName || kyc.userName}!`, "success");
                           }}
-                          className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition-colors cursor-pointer"
+                          className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-colors cursor-pointer min-h-[40px]"
                         >
                           Approve KYC Badge
                         </button>
@@ -1365,7 +1396,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                               targetName: kyc.legalName || kyc.userName,
                             });
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-400 font-bold text-xs border border-rose-500/40 transition-colors cursor-pointer"
+                          className="px-4 py-2.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-400 font-bold text-xs sm:text-sm border border-rose-500/40 transition-colors cursor-pointer min-h-[40px]"
                         >
                           Reject
                         </button>

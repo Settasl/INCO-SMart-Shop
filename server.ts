@@ -122,6 +122,36 @@ let dbState: DatabaseSchema = {
   lastUpdated: new Date().toISOString(),
 };
 
+const DEFAULT_SERVER_USERS: BackendAccount[] = [
+  {
+    id: "user-super-admin-01",
+    emailOrPhone: "settaholdings@gmail.com",
+    displayName: "INCO Master Admin (Setta SL)",
+    storeName: "INCO Headquarters",
+    role: "admin",
+    isVerified: true,
+    verificationStatus: "approved",
+    accountStatus: "active",
+    isPro: true,
+    proExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3650).toISOString(),
+    avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "user-demo-merchant-02",
+    emailOrPhone: "merchant@kiosk.com",
+    displayName: "David Kiosk",
+    storeName: "David Provisions & Mini Mart",
+    role: "merchant",
+    isVerified: false,
+    verificationStatus: "none",
+    accountStatus: "active",
+    isPro: false,
+    avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=140&auto=format&fit=crop&q=80",
+    createdAt: "2026-02-15T00:00:00.000Z",
+  },
+];
+
 function initDatabase() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -131,8 +161,12 @@ function initDatabase() {
       const raw = fs.readFileSync(DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (parsed) {
+        let loadedUsers = Array.isArray(parsed.users) ? parsed.users : [];
+        if (loadedUsers.length === 0) {
+          loadedUsers = [...DEFAULT_SERVER_USERS];
+        }
         dbState = {
-          users: Array.isArray(parsed.users) ? parsed.users : [],
+          users: loadedUsers,
           telemetry: Array.isArray(parsed.telemetry) ? parsed.telemetry : INITIAL_TELEMETRY,
           announcements: Array.isArray(parsed.announcements) ? parsed.announcements : INITIAL_ANNOUNCEMENTS,
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
@@ -140,6 +174,7 @@ function initDatabase() {
         return;
       }
     }
+    dbState.users = [...DEFAULT_SERVER_USERS];
     saveDatabase();
   } catch (err) {
     console.error("[Database] Error initializing database file:", err);
@@ -279,10 +314,201 @@ app.post("/api/announcements", (req, res) => {
 app.get("/api/sync", (req, res) => {
   res.json({
     success: true,
+    users: dbState.users,
     telemetry: dbState.telemetry,
     announcements: dbState.announcements,
     serverTime: new Date().toISOString(),
   });
+});
+
+// --- USERS & AUTH REGISTRY ENDPOINTS ---
+
+// Get all users
+app.get("/api/users", (req, res) => {
+  res.json({
+    success: true,
+    users: dbState.users,
+    total: dbState.users.length,
+    lastUpdated: dbState.lastUpdated,
+  });
+});
+
+// New User Registration Endpoint
+const UserSignupSchema = z.object({
+  emailOrPhone: z.string().min(3).max(128).trim(),
+  password: z.string().min(6).optional(),
+  displayName: z.string().max(128).optional(),
+  storeName: z.string().max(128).optional(),
+  role: z.enum(["admin", "merchant", "manager", "cashier"]).optional(),
+  avatarUrl: z.string().optional(),
+});
+
+app.post("/api/users/signup", (req, res) => {
+  try {
+    const parsed = UserSignupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid user registration data", details: parsed.error.issues });
+    }
+
+    const { emailOrPhone, displayName, storeName, role, avatarUrl } = parsed.data;
+    const cleanId = emailOrPhone.trim().toLowerCase();
+
+    // Check if user already exists
+    const existing = dbState.users.find(
+      (u) => u.emailOrPhone.toLowerCase() === cleanId || u.id.toLowerCase() === cleanId
+    );
+    if (existing) {
+      return res.status(409).json({ error: "An account with this email/phone already exists. Please sign in.", user: existing });
+    }
+
+    const isDefaultAdmin = cleanId === "settaholdings@gmail.com";
+    const newUser: BackendAccount = {
+      id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      emailOrPhone: cleanId,
+      displayName:
+        displayName?.trim() ||
+        (cleanId.includes("@")
+          ? cleanId.split("@")[0].charAt(0).toUpperCase() + cleanId.split("@")[0].slice(1)
+          : `Merchant ${cleanId.slice(-4)}`),
+      storeName: storeName?.trim() || "My Store",
+      role: isDefaultAdmin ? "admin" : (role || "merchant"),
+      isVerified: true,
+      verificationStatus: "approved",
+      accountStatus: "active",
+      isPro: isDefaultAdmin,
+      avatarUrl:
+        avatarUrl ||
+        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+    };
+
+    // Append to server state (newest first after admin)
+    dbState.users = [newUser, ...dbState.users.filter((u) => u.id !== newUser.id)];
+
+    // Record Telemetry event for the Admin Backend live feed
+    const signupEvent: TelemetryEvent = {
+      id: `telem-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: "signup",
+      storeName: newUser.storeName,
+      userIdentifier: newUser.emailOrPhone,
+      description: `New store registered: ${newUser.displayName} (${newUser.storeName})`,
+      timestamp: new Date().toISOString(),
+    };
+    dbState.telemetry.unshift(signupEvent);
+    if (dbState.telemetry.length > 100) dbState.telemetry = dbState.telemetry.slice(0, 100);
+
+    saveDatabase();
+
+    console.log(`[Users] New user registered on platform: ${newUser.emailOrPhone} (${newUser.displayName})`);
+
+    res.status(201).json({
+      success: true,
+      user: newUser,
+      message: "Account registered successfully and synchronized with admin backend.",
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Failed to register user";
+    res.status(500).json({ error: msg });
+  }
+});
+
+// Sync users between client and server
+app.post("/api/users/sync", (req, res) => {
+  try {
+    const clientUsers: any[] = Array.isArray(req.body.clientUsers) ? req.body.clientUsers : [];
+
+    // Merge: start with current server users
+    const map = new Map<string, BackendAccount>();
+    for (const u of dbState.users) {
+      map.set(u.emailOrPhone.toLowerCase(), u);
+    }
+
+    // Merge in client users if missing on server
+    for (const cu of clientUsers) {
+      if (cu && cu.emailOrPhone) {
+        const key = cu.emailOrPhone.toLowerCase();
+        if (!map.has(key)) {
+          const newBackendUser: BackendAccount = {
+            id: cu.id || `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            emailOrPhone: key,
+            displayName: cu.displayName || key.split("@")[0],
+            storeName: cu.storeName || "My Store",
+            role: key === "settaholdings@gmail.com" ? "admin" : (cu.role || "merchant"),
+            isVerified: cu.isVerified ?? true,
+            verificationStatus: cu.verificationStatus || "approved",
+            accountStatus: cu.accountStatus || "active",
+            isPro: cu.isPro || key === "settaholdings@gmail.com",
+            avatarUrl: cu.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
+            createdAt: cu.createdAt || new Date().toISOString(),
+          };
+          map.set(key, newBackendUser);
+        }
+      }
+    }
+
+    // Ensure Super Admin is always present
+    if (!map.has("settaholdings@gmail.com")) {
+      map.set("settaholdings@gmail.com", DEFAULT_SERVER_USERS[0]);
+    }
+
+    dbState.users = Array.from(map.values());
+    saveDatabase();
+
+    res.json({
+      success: true,
+      users: dbState.users,
+      total: dbState.users.length,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Failed to sync users";
+    res.status(500).json({ error: msg });
+  }
+});
+
+// Update user by ID or email
+app.put("/api/users/:id", (req, res) => {
+  try {
+    const target = decodeURIComponent(req.params.id).toLowerCase();
+    const idx = dbState.users.findIndex(
+      (u) => u.id.toLowerCase() === target || u.emailOrPhone.toLowerCase() === target
+    );
+
+    if (idx === -1) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    dbState.users[idx] = {
+      ...dbState.users[idx],
+      ...req.body,
+    };
+    saveDatabase();
+
+    res.json({ success: true, user: dbState.users[idx] });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Failed to update user";
+    res.status(500).json({ error: msg });
+  }
+});
+
+// Delete user by ID or email
+app.delete("/api/users/:id", (req, res) => {
+  try {
+    const target = decodeURIComponent(req.params.id).toLowerCase();
+    if (target === "settaholdings@gmail.com" || target === "user-super-admin-01") {
+      return res.status(403).json({ error: "Cannot delete master administrator account." });
+    }
+
+    dbState.users = dbState.users.filter(
+      (u) => u.id.toLowerCase() !== target && u.emailOrPhone.toLowerCase() !== target
+    );
+    saveDatabase();
+
+    res.json({ success: true, message: "User account deleted." });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Failed to delete user";
+    res.status(500).json({ error: msg });
+  }
 });
 
 // --- AI SERVICES (SECURE SERVER PROXIED) ---

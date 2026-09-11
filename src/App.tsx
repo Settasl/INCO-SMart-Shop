@@ -392,25 +392,35 @@ export function App() {
 
     // 2. Listen to local and cross-tab user account updates
     const handleRemoteUsersUpdate = () => {
-      setRegisteredAccounts(loadRegisteredAccounts());
-    };
-    window.addEventListener("inco:users-updated", handleRemoteUsersUpdate);
-
-    // 3. Sync whenever connectivity comes online
-    const handleOnline = () => {
       syncUsersWithServer()
         .then((synced) => {
           if (Array.isArray(synced) && synced.length > 0) {
             setRegisteredAccounts(synced);
+          } else {
+            setRegisteredAccounts(loadRegisteredAccounts());
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setRegisteredAccounts(loadRegisteredAccounts());
+        });
+    };
+    window.addEventListener("inco:users-updated", handleRemoteUsersUpdate);
+    window.addEventListener("storage", handleRemoteUsersUpdate);
+
+    // 3. Periodic background synchronization (every 8 seconds) to catch newly registered users
+    const pollInterval = setInterval(handleRemoteUsersUpdate, 8000);
+
+    // 4. Sync whenever connectivity comes online
+    const handleOnline = () => {
+      handleRemoteUsersUpdate();
     };
     window.addEventListener("online", handleOnline);
 
     return () => {
       window.removeEventListener("inco:users-updated", handleRemoteUsersUpdate);
+      window.removeEventListener("storage", handleRemoteUsersUpdate);
       window.removeEventListener("online", handleOnline);
+      clearInterval(pollInterval);
     };
   }, []);
 
@@ -835,7 +845,58 @@ export function App() {
   const handleDeleteBatchItems = (ids: string[]) => {
     const count = ids.length;
     setItems((prev) => prev.filter((item) => !ids.includes(item.id)));
+    if (activeBusinessId) {
+      ids.forEach((id) => {
+        deleteItemFromBusinessFirestore(activeBusinessId, id).catch(() => {});
+      });
+      recordAuditLog({
+        businessId: activeBusinessId,
+        userId: fbUser?.uid || "user",
+        userEmail: fbUser?.email || "user",
+        action: "BATCH_ITEMS_DELETED",
+        entityType: "item",
+        entityId: ids.join(","),
+        newData: { deletedCount: count, ids },
+      }).catch(() => {});
+    }
     showToast(`Deleted ${count} items from inventory in batch!`);
+  };
+
+  const handleUpdateBatchItems = (updates: Array<{ id: string; changes: Partial<InventoryItem> }>) => {
+    const count = updates.length;
+    setItems((prev) =>
+      prev.map((item) => {
+        const up = updates.find((u) => u.id === item.id);
+        if (!up) return item;
+        return {
+          ...item,
+          ...up.changes,
+          lastCountedAt: new Date().toISOString(),
+        };
+      })
+    );
+    if (activeBusinessId) {
+      updates.forEach((u) => {
+        const existing = items.find((i) => i.id === u.id);
+        if (existing) {
+          saveItemToBusinessFirestore(activeBusinessId, {
+            ...existing,
+            ...u.changes,
+            lastCountedAt: new Date().toISOString(),
+          }).catch(() => {});
+        }
+      });
+      recordAuditLog({
+        businessId: activeBusinessId,
+        userId: fbUser?.uid || "user",
+        userEmail: fbUser?.email || "user",
+        action: "BATCH_ITEMS_UPDATED",
+        entityType: "item",
+        entityId: updates.map((u) => u.id).join(","),
+        newData: { updatedCount: count },
+      }).catch(() => {});
+    }
+    showToast(`Successfully updated ${count} items in bulk!`);
   };
 
   const handleAssignBarcode = (itemId: string, barcode: string) => {
@@ -1187,6 +1248,7 @@ export function App() {
               onUpdateItem={handleUpdateItem}
               onDeleteItem={handleDeleteItem}
               onDeleteBatchItems={handleDeleteBatchItems}
+              onUpdateBatchItems={handleUpdateBatchItems}
               onScanItemBarcode={(item) => {
                 setTargetItemForAssign(item);
                 setIsScannerOpen(true);

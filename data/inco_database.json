@@ -1,0 +1,61 @@
+{
+  "users": [
+    {
+      "id": "user-super-admin-01",
+      "emailOrPhone": "settaholdings@gmail.com",
+      "displayName": "INCO Master Admin (Setta SL)",
+      "storeName": "INCO Headquarters",
+      "role": "admin",
+      "isVerified": true,
+      "verificationStatus": "approved",
+      "accountStatus": "active",
+      "isPro": true,
+      "proExpiresAt": "2036-09-08T08:23:28.466Z",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "user-demo-merchant-02",
+      "emailOrPhone": "merchant@kiosk.com",
+      "displayName": "David Kiosk",
+      "storeName": "David Provisions & Mini Mart",
+      "role": "merchant",
+      "isVerified": false,
+      "verificationStatus": "none",
+      "accountStatus": "active",
+      "isPro": false,
+      "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=140&auto=format&fit=crop&q=80",
+      "createdAt": "2026-02-15T00:00:00.000Z"
+    }
+  ],
+  "telemetry": [
+    {
+      "id": "telem-init-1",
+      "type": "signup",
+      "storeName": "David Provisions & Mini Mart",
+      "userIdentifier": "merchant@kiosk.com",
+      "description": "New merchant registered account",
+      "timestamp": "2026-09-11T05:43:20.718Z"
+    },
+    {
+      "id": "telem-init-2",
+      "type": "sale",
+      "storeName": "David Provisions & Mini Mart",
+      "userIdentifier": "merchant@kiosk.com",
+      "description": "POS sale completed: 4 items ($28.50)",
+      "amount": 28.5,
+      "timestamp": "2026-09-11T06:43:20.718Z"
+    }
+  ],
+  "announcements": [
+    {
+      "id": "ann-01",
+      "title": "INCO Smart Shop v4.0 Production Foundation Live",
+      "message": "Multi-tenant architecture, Firebase authentication, hardened security rules, and real-time ledger are active.",
+      "type": "feature",
+      "createdAt": "2026-09-11T07:43:20.718Z",
+      "author": "System Operations"
+    }
+  ],
+  "lastUpdated": "2026-09-11T08:32:47.589Z"
+}
