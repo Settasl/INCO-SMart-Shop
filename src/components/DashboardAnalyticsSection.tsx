@@ -74,9 +74,9 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
       {/* 3-COLUMN ANALYTICS GRID MATCHING IMAGE 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* COLUMN 1: INVENTORY STATUS (DONUT RING CHART) */}
-        <div className="p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-1 text-xs font-black text-slate-900 dark:text-white">
                 <span>Inventory Status</span>
                 <Info className="w-3.5 h-3.5 text-slate-400" />
@@ -207,9 +207,9 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
         </div>
 
         {/* COLUMN 2: TOP SELLING ITEMS */}
-        <div className="p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-1 text-xs font-black text-slate-900 dark:text-white">
                 <span>Top Selling Items</span>
                 <Info className="w-3.5 h-3.5 text-slate-400" />
@@ -220,7 +220,7 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
             </div>
 
             {/* List with product image avatar, title, units, revenue */}
-            <div className="divide-y divide-slate-100 dark:divide-slate-800/60 my-2 space-y-1">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 my-2 space-y-1">
               {topSellingList.map((item, idx) => (
                 <div key={item.id} className="py-1.5 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -231,7 +231,7 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
                       <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
                         {item.name}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono">
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                         {(item.quantity * 2 + 150 + idx * 80).toLocaleString()} units
                       </div>
                     </div>
@@ -248,7 +248,7 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
             </div>
           </div>
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 text-right">
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-right">
             <button
               onClick={() => {
                 sounds.playClick();
@@ -263,9 +263,9 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
         </div>
 
         {/* COLUMN 3: SALES OVERVIEW (SPLINE CHART) */}
-        <div className="p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div className="text-xs font-black text-slate-900 dark:text-white">
                 Sales Overview
               </div>
@@ -276,14 +276,14 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
 
             {/* Total Sales & Margin Badge */}
             <div className="my-2">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Total Sales
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white">
                   {settings.currencySymbol} 4,326.50
                 </span>
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded-md">
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded-md">
                   ↑ 12.5% vs last month
                 </span>
               </div>
@@ -316,7 +316,7 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
               </svg>
 
               {/* Date Markers */}
-              <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono pt-1">
+              <div className="flex items-center justify-between text-[9px] text-slate-500 dark:text-slate-400 font-mono pt-1">
                 <span>1 May</span>
                 <span>8 May</span>
                 <span>15 May</span>
@@ -329,8 +329,8 @@ export const DashboardAnalyticsSection: React.FC<DashboardAnalyticsSectionProps>
       </div>
 
       {/* RECENT ACTIVITY STREAM MATCHING IMAGE 1 */}
-      <div className="p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+      <div className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
           <h3 className="text-xs sm:text-sm font-black text-slate-950 dark:text-white">
             Recent Activity
           </h3>

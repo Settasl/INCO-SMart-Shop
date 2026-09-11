@@ -93,12 +93,12 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
         </div>
       </div>
 
-      {/* 4 Glassy Metric Cards Matching Image 1 */}
+      {/* 4 Crisp Lean Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* CARD 1: TOTAL SPENT (COST) */}
-        <div className="p-3.5 sm:p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div className="p-3.5 sm:p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between text-slate-400">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
                 <span>Total Spent (Cost)</span>
                 <Info className="w-3 h-3 text-slate-400" />
@@ -113,17 +113,17 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
               })}
             </div>
 
-            <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-bold">
+            <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] font-bold border border-purple-200 dark:border-purple-800">
               Purchase Cost
             </div>
 
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium mt-1">
               Invested in {totalUnits} units
             </div>
           </div>
 
           {/* Mini Sparkline Chart */}
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <svg className="w-24 h-6 text-purple-500 overflow-visible" viewBox="0 0 100 25">
               <path
                 d="M 0 18 Q 15 22, 30 14 T 60 18 T 85 8 T 100 12"
@@ -133,7 +133,7 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
                 strokeLinecap="round"
               />
             </svg>
-            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
+            <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
               <span>2 mins ago</span>
               <Clock className="w-3 h-3" />
             </div>
@@ -141,9 +141,9 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
         </div>
 
         {/* CARD 2: TOTAL RETAIL VALUE */}
-        <div className="p-3.5 sm:p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div className="p-3.5 sm:p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between text-slate-400">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
                 <span>Total Retail Value</span>
                 <Info className="w-3 h-3 text-slate-400" />
@@ -158,17 +158,17 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
               })}
             </div>
 
-            <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+            <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
               Expected Revenue
             </div>
 
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium mt-1">
               Revenue if 100% sold
             </div>
           </div>
 
           {/* Mini Sparkline Chart */}
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <svg className="w-24 h-6 text-emerald-500 overflow-visible" viewBox="0 0 100 25">
               <path
                 d="M 0 20 Q 20 15, 40 18 T 70 8 T 100 6"
@@ -178,7 +178,7 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
                 strokeLinecap="round"
               />
             </svg>
-            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
+            <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
               <span>2 mins ago</span>
               <Clock className="w-3 h-3" />
             </div>
@@ -186,9 +186,9 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
         </div>
 
         {/* CARD 3: PROJECTED GROSS PROFIT */}
-        <div className="p-3.5 sm:p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div className="p-3.5 sm:p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between text-slate-400">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
                 <span>Projected Gross Profit</span>
                 <Info className="w-3 h-3 text-slate-400" />
@@ -203,17 +203,17 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
               })}
             </div>
 
-            <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+            <div className="inline-block mt-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-bold border border-amber-200 dark:border-amber-800">
               +{profitMargin.toFixed(1)}% Margin
             </div>
 
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">
+            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium mt-1">
               Expected profit gain
             </div>
           </div>
 
           {/* Mini Sparkline Chart */}
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <svg className="w-24 h-6 text-amber-500 overflow-visible" viewBox="0 0 100 25">
               <path
                 d="M 0 22 Q 25 12, 50 18 T 80 8 T 100 4"
@@ -223,7 +223,7 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
                 strokeLinecap="round"
               />
             </svg>
-            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
+            <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
               <span>2 mins ago</span>
               <Clock className="w-3 h-3" />
             </div>
@@ -231,9 +231,9 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
         </div>
 
         {/* CARD 4: CASH IN HAND & OVERVIEW */}
-        <div className="p-3.5 sm:p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/80 dark:border-slate-800 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+        <div className="p-3.5 sm:p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div>
-            <div className="flex items-center justify-between text-slate-400">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
                 <span>Cash In Hand & Overview</span>
               </div>
@@ -241,26 +241,26 @@ export const StockFinancialsBanner: React.FC<StockFinancialsBannerProps> = ({
 
             <div className="mt-2 space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">In Hand</span>
-                <span className="text-sm font-black text-emerald-600">
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">In Hand</span>
+                <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
                   {settings.currencySymbol}
                   {cashAtHand.toFixed(2)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Low Stock</span>
-                <span className="text-sm font-black text-rose-500">
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">Low Stock</span>
+                <span className="text-sm font-black text-rose-500 dark:text-rose-400">
                   {lowStockCount} items
                 </span>
               </div>
             </div>
 
-            <div className="text-[11px] text-slate-500 font-medium mt-1">
+            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium mt-1">
               {lowStockCount > 0 ? `${lowStockCount} item(s) need restock` : "All items in good stock"}
             </div>
           </div>
 
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <button
               onClick={() => {
                 sounds.playClick();

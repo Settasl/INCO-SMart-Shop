@@ -356,8 +356,14 @@ export function App() {
     localStorage.setItem("inco_dark_mode", JSON.stringify(darkMode));
     if (darkMode) {
       document.documentElement.classList.add("dark");
+      document.body.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
+      document.body.classList.remove("dark");
+    }
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      themeMeta.setAttribute("content", "#000000");
     }
   }, [darkMode]);
 

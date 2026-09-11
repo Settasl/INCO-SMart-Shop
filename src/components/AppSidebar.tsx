@@ -60,7 +60,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     userProfile?.subscription?.plan === "INCO Pro AI";
 
   return (
-    <aside className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 p-4 flex flex-col justify-between hidden md:flex shrink-0 select-none z-20">
+    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-4 flex flex-col justify-between hidden md:flex shrink-0 select-none z-20">
       {/* Top Logo & Branding */}
       <div>
         <div className="flex items-center gap-2.5 px-2 py-1 mb-6">
@@ -70,9 +70,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           </span>
         </div>
 
-        {/* Navigation Items Matching Image 1 */}
+        {/* Navigation Items */}
         <nav className="space-y-1">
-          {/* Dashboard (Active) */}
+          {/* Dashboard */}
           <button
             onClick={() => {
               sounds.playClick();
@@ -80,8 +80,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
               activeView === "dashboard"
-                ? "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 shadow-xs border border-purple-100 dark:border-purple-900/50"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-amber-400 text-slate-950 shadow-sm font-black"
+                : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white"
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
@@ -96,8 +96,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
               activeView === "stock"
-                ? "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 shadow-xs border border-purple-100 dark:border-purple-900/50"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-amber-400 text-slate-950 shadow-sm font-black"
+                : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white"
             }`}
           >
             <Boxes className="w-4 h-4" />
@@ -110,7 +110,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenQuickSale();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
             <ShoppingCart className="w-4 h-4" />
             <span>Sales</span>
@@ -122,7 +122,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenQuickRestock();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
             <Truck className="w-4 h-4" />
             <span>Purchase</span>
@@ -134,7 +134,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenStockValuation();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
             <PieChart className="w-4 h-4" />
             <span>Valuation</span>
@@ -146,7 +146,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenSalesReport();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
             <BarChart2 className="w-4 h-4" />
             <span>Reports</span>
@@ -159,7 +159,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               if (onOpenSuppliers) onOpenSuppliers();
               else onOpenQuickRestock();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
             <Users className="w-4 h-4" />
             <span>Suppliers</span>
@@ -171,7 +171,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               sounds.playClick();
               onOpenSettings();
             }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-all cursor-pointer"
           >
             <Settings className="w-4 h-4" />
             <span>Settings</span>
