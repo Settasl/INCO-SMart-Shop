@@ -106,7 +106,49 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       }
 
-      // 5. Auto-provision a default business for the user if they don't have one yet
+      // 5. If we have a cached business data in localStorage, maintain it in offline mode
+      if (cachedBizJson) {
+        try {
+          const cachedBiz = JSON.parse(cachedBizJson) as Business;
+          if (cachedBiz && cachedBiz.businessId) {
+            setCurrentBusiness(cachedBiz);
+            setIsLoading(false);
+            return;
+          }
+        } catch {}
+      }
+
+      // If user has a business registered (targetBusinessId or cachedBizId), maintain it in offline mode
+      if (targetBusinessId || cachedBizId) {
+        const activeId = targetBusinessId || cachedBizId!;
+        const offlineBiz: Business = {
+          businessId: activeId,
+          businessName: user.displayName ? `${user.displayName}'s Store` : "My Store",
+          businessType: "shop",
+          ownerId: user.uid,
+          status: "active",
+          currency: "LRD",
+          country: "Liberia",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setCurrentBusiness(offlineBiz);
+        setMembership({
+          uid: user.uid,
+          businessId: activeId,
+          email: user.email || "",
+          role: "owner",
+          status: "active",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        localStorage.setItem("inco_active_business_id", activeId);
+        localStorage.setItem("inco_cached_business_data", JSON.stringify(offlineBiz));
+        setIsLoading(false);
+        return;
+      }
+
+      // 6. Only auto-provision a default business if user has no existing business at all
       const defaultName = `${user.displayName || "My"} Store`;
       const { business, member } = await createTenantBusiness(user.uid, {
         businessName: defaultName,

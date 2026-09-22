@@ -18,6 +18,7 @@ import { InventoryItem, PaymentStatus, StoreSettings } from "../types";
 
 export interface SalePaymentDetails {
   paymentStatus: PaymentStatus;
+  paymentMethod?: string;
   customerName?: string;
   customerPhone?: string;
   amountPaid: number;

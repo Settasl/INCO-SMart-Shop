@@ -18,7 +18,11 @@ export const CATEGORIES: Category[] = [
   "Misc",
 ];
 
-export const INITIAL_INVENTORY: InventoryItem[] = [
+// Empty production initial state: fresh businesses start with 0 items
+export const INITIAL_INVENTORY: InventoryItem[] = [];
+
+// Optional sample inventory that merchants can explicitly trigger if desired
+export const SAMPLE_STARTER_INVENTORY: InventoryItem[] = [
   // --- MEDICINE & HEALTHCARE ---
   {
     id: "item-med-1",
@@ -563,7 +567,11 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   },
 ];
 
-export const INITIAL_CREDIT_RECORDS: CreditRecord[] = [
+// Empty production initial state: fresh businesses start with 0 credit records
+export const INITIAL_CREDIT_RECORDS: CreditRecord[] = [];
+
+// Optional sample credit records for explicit demo exploration
+export const SAMPLE_STARTER_CREDIT_RECORDS: CreditRecord[] = [
   {
     id: "cred-1",
     customerName: "Mama Sarah (Regular Customer)",

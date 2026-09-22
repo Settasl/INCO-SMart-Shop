@@ -12,10 +12,17 @@ import {
   signInWithCredential,
   OAuthProvider,
   User,
+  updatePassword,
+  deleteUser,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
 } from "firebase/auth";
 import { requestGoogleProfileGIS } from "./googleAuth";
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   doc,
   setDoc,
@@ -28,6 +35,9 @@ import {
   serverTimestamp,
   getDocFromServer,
   writeBatch,
+  runTransaction,
+  limit,
+  orderBy,
 } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
 import {
@@ -37,11 +47,27 @@ import {
   StockMovement,
   CreditRecord,
   SaleItem,
+  Customer,
+  Supplier,
+  Expense,
+  CashTransaction,
+  SaleRecord,
 } from "../types";
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-export const db = getFirestore(app);
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+} catch {
+  firestoreInstance = getFirestore(app);
+}
+
+export const db = firestoreInstance;
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
@@ -88,8 +114,19 @@ export function handleFirestoreError(
   operationType: OperationType,
   path: string | null
 ): void {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const isOffline =
+    errMsg.includes("client is offline") ||
+    errMsg.includes("offline") ||
+    (error as any)?.code === "unavailable";
+
+  if (isOffline) {
+    console.warn(`[Firebase] Offline mode active during ${operationType} on ${path || "unknown"}: ${errMsg}`);
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -109,23 +146,70 @@ export function handleFirestoreError(
 export async function signUpWithEmail(
   email: string,
   pass: string,
-  displayName: string
+  displayName: string,
+  storeName?: string
 ): Promise<User> {
   const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
   if (displayName.trim()) {
     await updateProfile(cred.user, { displayName: displayName.trim() });
   }
 
-  // Create base user record
+  const cleanEmail = cred.user.email || email.trim();
+  const isSuperAdmin = cleanEmail.toLowerCase() === "settaholdings@gmail.com";
+  const now = new Date().toISOString();
+  const businessId = `biz_${cred.user.uid.slice(0, 10)}_${Date.now()}`;
+  const finalStoreName = storeName?.trim() || displayName.trim() || "My Store";
+
+  // 1. Write user document to /users/{uid}
   const userDocRef = doc(db, "users", cred.user.uid);
   await setDoc(
     userDocRef,
     {
       uid: cred.user.uid,
-      email: cred.user.email,
-      displayName: displayName.trim() || cred.user.email?.split("@")[0] || "Merchant",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      email: cleanEmail,
+      displayName: displayName.trim() || cleanEmail.split("@")[0] || "Merchant",
+      storeName: finalStoreName,
+      role: isSuperAdmin ? "admin" : "merchant",
+      accountStatus: "active",
+      isVerified: isSuperAdmin,
+      verificationStatus: isSuperAdmin ? "approved" : "none",
+      activeBusinessId: businessId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  // 2. Create initial business document in /businesses/{businessId}
+  const bizDocRef = doc(db, "businesses", businessId);
+  await setDoc(
+    bizDocRef,
+    {
+      businessId,
+      businessName: finalStoreName,
+      businessType: "shop",
+      ownerId: cred.user.uid,
+      currency: "USD",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  // 3. Add membership in /businesses/{businessId}/members/{uid} with role: 'owner'
+  const memberDocRef = doc(db, "businesses", businessId, "members", cred.user.uid);
+  await setDoc(
+    memberDocRef,
+    {
+      uid: cred.user.uid,
+      businessId,
+      role: "owner",
+      status: "active",
+      email: cleanEmail,
+      displayName: displayName.trim() || cleanEmail.split("@")[0] || "Merchant",
+      createdAt: now,
+      updatedAt: now,
     },
     { merge: true }
   );
@@ -142,7 +226,8 @@ export async function syncUserFirestoreRecord(
   user: User,
   email: string,
   displayName?: string,
-  photoURL?: string
+  photoURL?: string,
+  storeName?: string
 ): Promise<void> {
   try {
     const isSuperAdmin = email.toLowerCase() === "settaholdings@gmail.com";
@@ -154,7 +239,9 @@ export async function syncUserFirestoreRecord(
         email: user.email || email,
         displayName: displayName || user.displayName || (isSuperAdmin ? "INCO Master Admin (Setta SL)" : email.split("@")[0]),
         photoURL: photoURL || user.photoURL || (isSuperAdmin ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80" : null),
+        storeName: storeName || "My Store",
         role: isSuperAdmin ? "admin" : "merchant",
+        accountStatus: "active",
         isVerified: true,
         updatedAt: new Date().toISOString(),
       },
@@ -165,67 +252,83 @@ export async function syncUserFirestoreRecord(
   }
 }
 
-function getDeterministicOAuthSecret(email: string): string {
-  return `INCO_${email.toLowerCase().trim()}_Secret2026!Key`;
-}
-
-export async function signInWithGoogleEmail(googleEmail: string, displayName?: string): Promise<User> {
-  const email = googleEmail.trim().toLowerCase();
-  
-  // 1. Try standard GIS OAuth first
+/**
+ * Retrieves all registered users from Firestore (accessible by platform super-admin)
+ */
+export async function fetchAllUsersFromFirestore(): Promise<any[]> {
   try {
-    return await signInWithGoogle(email);
-  } catch (gisErr: any) {
-    const msg = gisErr?.message || "";
-    if (msg.includes("cancelled") || msg.includes("closed")) {
-      throw gisErr;
-    }
-    console.warn("[Firebase] Direct Google Auth resilient fallback triggered:", msg);
-  }
-
-  // 2. Direct Google Email authentication (zero-failure fallback for live unverified domains)
-  const pass = getDeterministicOAuthSecret(email);
-  try {
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
-    await syncUserFirestoreRecord(cred.user, email, displayName || cred.user.displayName || email.split("@")[0]);
-    return cred.user;
-  } catch (signErr: any) {
-    if (signErr?.code === "auth/user-not-found" || signErr?.code === "auth/invalid-credential") {
-      try {
-        const createCred = await createUserWithEmailAndPassword(auth, email, pass);
-        const name = displayName || email.split("@")[0];
-        try {
-          await updateProfile(createCred.user, { displayName: name });
-        } catch (e) {
-          // ignore profile update error
-        }
-        await syncUserFirestoreRecord(createCred.user, email, name);
-        return createCred.user;
-      } catch (createErr: any) {
-        if (createErr?.code === "auth/email-already-in-use") {
-          throw new Error("This email was registered with a custom password. Please log in with your password or click 'Forgot password'.");
-        }
-        throw createErr;
+    const colRef = collection(db, "users");
+    const snapshot = await getDocs(colRef);
+    const users: any[] = [];
+    snapshot.forEach((docSnap) => {
+      if (docSnap.exists()) {
+        const d = docSnap.data();
+        users.push({
+          id: d.uid || docSnap.id,
+          uid: d.uid || docSnap.id,
+          identifier: d.email || docSnap.id,
+          displayName: d.displayName || d.email?.split("@")[0] || "Merchant",
+          storeName: d.storeName || "My Store",
+          role: d.role || "merchant",
+          isVerified: !!d.isVerified,
+          verificationStatus: d.verificationStatus || "none",
+          accountStatus: d.accountStatus || "active",
+          avatarUrl: d.photoURL || d.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
+          activeBusinessId: d.activeBusinessId,
+          createdAt: d.createdAt || new Date().toISOString(),
+          updatedAt: d.updatedAt,
+        });
       }
-    }
-    throw signErr;
+    });
+    return users;
+  } catch (err) {
+    console.warn("[Firebase] fetchAllUsersFromFirestore error:", err);
+    return [];
   }
 }
 
+/**
+ * Updates a user profile directly in Firestore (Platform Super-Admin action)
+ */
+export async function updateUserInFirestore(
+  userId: string,
+  updates: Record<string, any>
+): Promise<void> {
+  const userDocRef = doc(db, "users", userId);
+  await setDoc(
+    userDocRef,
+    {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Removes a user document in Firestore (Platform Super-Admin action)
+ */
+export async function deleteUserFromFirestore(userId: string): Promise<void> {
+  const userDocRef = doc(db, "users", userId);
+  await deleteDoc(userDocRef);
+}
+
+/**
+ * Genuine Google Authentication via Google Identity Services (GIS) or Firebase Provider Popup
+ */
 export async function signInWithGoogle(hintEmail?: string): Promise<User> {
-  // Method 1: Google Identity Services (GIS) OAuth popup (Works directly in sandboxed iframes)
+  // Method 1: Google Identity Services (GIS) OAuth popup (Works directly in sandboxed environments)
   try {
     const googleProfile = await requestGoogleProfileGIS(hintEmail);
-    if (googleProfile.accessToken) {
+    if (googleProfile?.accessToken) {
       try {
         const credential = GoogleAuthProvider.credential(googleProfile.idToken || null, googleProfile.accessToken);
         const cred = await signInWithCredential(auth, credential);
         await syncUserFirestoreRecord(cred.user, cred.user.email || googleProfile.email, googleProfile.name, googleProfile.photoURL);
         return cred.user;
       } catch (credErr: any) {
-        console.warn("[Firebase] signInWithCredential status:", credErr?.code, credErr?.message);
         if (credErr?.code === "auth/account-exists-with-different-credential") {
-          throw new Error("This email was registered with a password. Please enter your password to sign in, or click 'Forgot password' to reset it.");
+          throw new Error("This email was registered with an email and password. Please sign in with your password or use 'Forgot password'.");
         }
         throw credErr;
       }
@@ -234,9 +337,9 @@ export async function signInWithGoogle(hintEmail?: string): Promise<User> {
     const gError = gisErr as { message?: string };
     const gisMsg = gError?.message || "";
     if (gisMsg.includes("closed") || gisMsg.includes("cancelled") || gisMsg.includes("dismissed")) {
-      throw new Error("Google sign in was cancelled.");
+      throw new Error("Google sign-in was cancelled.");
     }
-    console.warn("[Firebase] GIS prompt note, trying standard popup:", gisMsg);
+    console.warn("[Firebase] GIS prompt notice:", gisMsg);
   }
 
   // Method 2: Standard Firebase popup
@@ -253,30 +356,29 @@ export async function signInWithGoogle(hintEmail?: string): Promise<User> {
     const error = popupErr as { code?: string; message?: string };
     const errCode = error?.code || "";
     const errMsg = error?.message || "";
-    console.warn("[Firebase] Google popup notification:", errCode, errMsg);
 
-    // If hintEmail exists and domain is unrecognized, seamlessly fallback
-    if (hintEmail && (errCode === "auth/unauthorized-domain" || errMsg.includes("not recognized") || errCode === "auth/popup-blocked")) {
-      return await signInWithGoogleEmail(hintEmail);
-    }
-    
-    if (errCode === "auth/unauthorized-domain" || errMsg.includes("not recognized")) {
-      throw new Error("UNAUTHORIZED_DOMAIN: Live domain requires authorization in Google Cloud / Firebase Console. Enter your Google email to continue instantly.");
+    if (errCode === "auth/popup-closed-by-user" || errMsg.includes("closed-by-user") || errMsg.includes("cancelled")) {
+      throw new Error("Google sign-in popup was closed before completing.");
     }
     if (errCode === "auth/popup-blocked") {
-      throw new Error("Google sign in popup was blocked by browser. Please allow popups or enter your Google email.");
+      throw new Error("The Google sign-in popup was blocked by your browser. Please allow popups or use email and password.");
     }
-    throw popupErr;
+    if (errCode === "auth/unauthorized-domain") {
+      throw new Error("This domain is not yet authorized in Firebase Console Authentication settings. Please log in using email and password.");
+    }
+    throw new Error(errMsg || "Google sign-in failed. Please use email and password.");
   }
 }
 
-export async function signInWithApple(hintEmail?: string): Promise<User> {
-  // Method 1: Try Firebase Apple OAuth Provider Popup
+/**
+ * Genuine Apple Authentication via Firebase OAuth Provider Popup
+ */
+export async function signInWithApple(): Promise<User> {
   try {
     const cred = await signInWithPopup(auth, appleProvider);
     await syncUserFirestoreRecord(
       cred.user,
-      cred.user.email || hintEmail || "",
+      cred.user.email || "",
       cred.user.displayName || "Apple User",
       cred.user.photoURL || undefined
     );
@@ -284,93 +386,17 @@ export async function signInWithApple(hintEmail?: string): Promise<User> {
   } catch (appleErr: any) {
     const errCode = appleErr?.code || "";
     const errMsg = appleErr?.message || "";
-    console.warn("[Firebase] Apple Sign-In popup notice:", errCode, errMsg);
 
-    if (errMsg.includes("closed") || errMsg.includes("cancelled")) {
-      throw new Error("Apple sign in was cancelled.");
+    if (errCode === "auth/popup-closed-by-user" || errMsg.includes("closed-by-user") || errMsg.includes("cancelled")) {
+      throw new Error("Apple sign-in popup was closed before completing.");
     }
-
-    // If hintEmail is available, authenticate directly
-    if (hintEmail && hintEmail.trim()) {
-      return await signInWithAppleEmail(hintEmail);
+    if (errCode === "auth/popup-blocked") {
+      throw new Error("The Apple sign-in popup was blocked by your browser. Please allow popups or use email and password.");
     }
-
-    if (
-      errCode === "auth/unauthorized-domain" ||
-      errCode === "auth/operation-not-allowed" ||
-      errCode === "auth/configuration-not-found" ||
-      errCode === "auth/invalid-api-key" ||
-      errCode === "auth/popup-blocked" ||
-      errMsg.includes("blocked") ||
-      errMsg.includes("unauthorized")
-    ) {
-      throw new Error("UNAUTHORIZED_DOMAIN: Apple ID popup not available. Please enter your Apple ID to proceed.");
+    if (errCode === "auth/unauthorized-domain") {
+      throw new Error("This domain is not yet authorized in Firebase Console Authentication settings. Please log in using email and password.");
     }
-    throw appleErr;
-  }
-}
-
-export async function signInWithAppleEmail(appleEmail: string, displayName?: string): Promise<User> {
-  let email = appleEmail.trim().toLowerCase();
-  if (!email.includes("@")) {
-    email = `${email}@icloud.com`;
-  }
-  const pass = getDeterministicOAuthSecret(email);
-
-  try {
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
-    await syncUserFirestoreRecord(cred.user, email, displayName || cred.user.displayName || "Apple User");
-    return cred.user;
-  } catch (signErr: any) {
-    const code = signErr?.code || "";
-    if (code === "auth/user-not-found" || code === "auth/invalid-credential" || code === "auth/wrong-password") {
-      try {
-        const createCred = await createUserWithEmailAndPassword(auth, email, pass);
-        const name = displayName || email.split("@")[0] || "Apple User";
-        try {
-          await updateProfile(createCred.user, { displayName: name });
-        } catch (e) {
-          // ignore profile update error
-        }
-        await syncUserFirestoreRecord(createCred.user, email, name);
-        return createCred.user;
-      } catch (createErr: any) {
-        // If email-already-in-use or password conflict with existing account:
-        // This is a legitimate Apple ID authentication for an existing store account!
-        // We safely accept the Apple ID, sync the verified user profile to Firestore, and return an authenticated user session.
-        const name = displayName || email.split("@")[0] || "Apple User";
-        const syntheticUid = `apple_${email.replace(/[^a-zA-Z0-9]/g, "_")}`;
-        const appleUser = {
-          uid: syntheticUid,
-          email,
-          displayName: name,
-          photoURL: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
-          emailVerified: true,
-          isAnonymous: false,
-        } as unknown as User;
-        try {
-          await syncUserFirestoreRecord(appleUser, email, name);
-        } catch (e) {}
-        return appleUser;
-      }
-    }
-
-    // For any other Firebase error (e.g. offline, auth blocked, unauthorized domain),
-    // provide a verified authenticated session so Apple ID login never leaves the user stuck.
-    const name = displayName || email.split("@")[0] || "Apple User";
-    const syntheticUid = `apple_${email.replace(/[^a-zA-Z0-9]/g, "_")}`;
-    const appleUser = {
-      uid: syntheticUid,
-      email,
-      displayName: name,
-      photoURL: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
-      emailVerified: true,
-      isAnonymous: false,
-    } as unknown as User;
-    try {
-      await syncUserFirestoreRecord(appleUser, email, name);
-    } catch (e) {}
-    return appleUser;
+    throw new Error(errMsg || "Apple sign-in failed. Please use email and password.");
   }
 }
 
@@ -380,6 +406,50 @@ export async function sendPasswordReset(email: string): Promise<void> {
 
 export async function signOutUser(): Promise<void> {
   await fbSignOut(auth);
+}
+
+export async function updateUserPassword(newPassword: string, currentPassword?: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("No active authenticated session found. Please sign in.");
+
+  if (currentPassword && currentUser.email) {
+    const cred = EmailAuthProvider.credential(currentUser.email, currentPassword);
+    await reauthenticateWithCredential(currentUser, cred);
+  }
+
+  try {
+    await updatePassword(currentUser, newPassword);
+  } catch (err: any) {
+    if (err?.code === "auth/requires-recent-login") {
+      throw new Error("Security check: please provide your current password to confirm changing your password.");
+    }
+    throw err;
+  }
+}
+
+export async function deleteCurrentUserAccount(currentPassword?: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("No active authenticated session found.");
+
+  if (currentPassword && currentUser.email) {
+    const cred = EmailAuthProvider.credential(currentUser.email, currentPassword);
+    await reauthenticateWithCredential(currentUser, cred);
+  }
+
+  try {
+    await deleteDoc(doc(db, "users", currentUser.uid));
+  } catch (e) {
+    console.warn("[Firebase] Could not delete user doc before auth deletion:", e);
+  }
+
+  try {
+    await deleteUser(currentUser);
+  } catch (err: any) {
+    if (err?.code === "auth/requires-recent-login") {
+      throw new Error("Security verification required: please re-enter your current password to delete your account permanently.");
+    }
+    throw err;
+  }
 }
 
 // ============================================================================
@@ -456,20 +526,53 @@ export async function getTenantBusiness(
   uid: string
 ): Promise<{ business: Business | null; member: BusinessMember | null }> {
   try {
-    const memberDoc = await getDoc(doc(db, "businesses", businessId, "members", uid));
-    if (!memberDoc.exists()) {
-      return { business: null, member: null };
-    }
     const businessDoc = await getDoc(doc(db, "businesses", businessId));
-    if (!businessDoc.exists()) {
-      return { business: null, member: null };
+    if (businessDoc.exists()) {
+      const businessData = businessDoc.data() as Business;
+      let memberData: BusinessMember | null = null;
+      try {
+        const memberDoc = await getDoc(doc(db, "businesses", businessId, "members", uid));
+        if (memberDoc.exists()) {
+          memberData = memberDoc.data() as BusinessMember;
+        }
+      } catch (memErr) {
+        console.warn("[Firebase] Member doc lookup deferred:", memErr);
+      }
+
+      if (!memberData && businessData.ownerId === uid) {
+        memberData = {
+          uid,
+          businessId,
+          role: "owner",
+          status: "active",
+          email: auth.currentUser?.email || undefined,
+          displayName: auth.currentUser?.displayName || "Store Owner",
+          permissions: ["all"],
+          createdAt: businessData.createdAt,
+          updatedAt: businessData.updatedAt,
+        };
+      }
+
+      if (memberData) {
+        return {
+          business: businessData,
+          member: memberData,
+        };
+      }
     }
-    return {
-      business: businessDoc.data() as Business,
-      member: memberDoc.data() as BusinessMember,
-    };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `businesses/${businessId}`);
+    return { business: null, member: null };
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const isOffline =
+      errMsg.includes("client is offline") ||
+      errMsg.includes("offline") ||
+      error?.code === "unavailable";
+
+    if (isOffline) {
+      console.warn(`[Firebase] getTenantBusiness operating in offline cache mode for businesses/${businessId}`);
+    } else {
+      handleFirestoreError(error, OperationType.GET, `businesses/${businessId}`);
+    }
     return { business: null, member: null };
   }
 }
@@ -608,6 +711,373 @@ export async function syncCreditsToBusinessFirestore(businessId: string, credits
     await batch.commit();
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `businesses/${businessId}/customers`);
+  }
+}
+
+// ============================================================================
+// ATOMIC POINT-OF-SALE TRANSACTION EXECUTION (PREVENTS RACE CONDITIONS & NEGATIVES)
+// ============================================================================
+
+export interface PosSalePayload {
+  saleId: string;
+  items: SaleItem[];
+  totalAmount: number;
+  totalUnits: number;
+  paymentMethod: "Cash at Hand" | "Mobile Money (M-Pesa/MTN)" | "Credit / Pay Later" | "Card" | string;
+  amountPaid: number;
+  paymentStatus: "paid" | "partial" | "unpaid";
+  customerId?: string;
+  customerName?: string;
+  notes?: string;
+  allowNegativeStock?: boolean;
+}
+
+export async function executeSaleTransactionAtomic(
+  businessId: string,
+  payload: PosSalePayload
+): Promise<{ success: boolean; saleId: string; movements: StockMovement[] }> {
+  if (!businessId) throw new Error("A valid businessId is required for checkout.");
+  if (!payload.items || payload.items.length === 0) throw new Error("Cannot checkout an empty sale.");
+
+  const cashierUid = auth.currentUser?.uid || "unassigned";
+  const now = new Date().toISOString();
+  const createdMovements: StockMovement[] = [];
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      // 1. Pre-read all inventory items to verify quantities
+      const inventoryDocs: { docRef: any; currentData: InventoryItem; item: SaleItem }[] = [];
+
+      for (const saleItem of payload.items) {
+        const itemDocRef = doc(db, "businesses", businessId, "inventory", saleItem.itemId);
+        const itemSnap = await transaction.get(itemDocRef);
+
+        if (!itemSnap.exists()) {
+          throw new Error(`Product "${saleItem.itemName}" could not be found in active inventory.`);
+        }
+
+        const currentData = itemSnap.data() as InventoryItem;
+        const currentQty = Number(currentData.quantity) || 0;
+
+        if (!payload.allowNegativeStock && currentQty < saleItem.quantity) {
+          throw new Error(
+            `Insufficient stock for "${saleItem.itemName}". Available: ${currentQty}, Requested: ${saleItem.quantity}.`
+          );
+        }
+
+        inventoryDocs.push({ docRef: itemDocRef, currentData, item: saleItem });
+      }
+
+      // 2. Perform all stock adjustments
+      for (const { docRef, currentData, item } of inventoryDocs) {
+        const prevQty = Number(currentData.quantity) || 0;
+        const nextQty = Math.max(0, prevQty - item.quantity);
+
+        transaction.update(docRef, {
+          quantity: nextQty,
+          lastCountedAt: now,
+          updatedAt: now,
+        });
+
+        const movementId = `mov_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const movementRef = doc(db, "businesses", businessId, "stockMovements", movementId);
+        const movementData: StockMovement = {
+          id: movementId,
+          itemId: item.itemId,
+          itemName: item.itemName,
+          type: payload.paymentStatus === "unpaid" ? "sale_credit" : "sale",
+          delta: -item.quantity,
+          newQuantity: nextQty,
+          timestamp: now,
+          note: `POS Sale #${payload.saleId.slice(0, 8)} (${payload.paymentMethod})`,
+        };
+
+        transaction.set(movementRef, {
+          ...movementData,
+          businessId,
+          actorUid: cashierUid,
+          createdAt: serverTimestamp(),
+        });
+
+        createdMovements.push(movementData);
+      }
+
+      // 3. Write immutable completed sale record
+      const saleRef = doc(db, "businesses", businessId, "sales", payload.saleId);
+      const saleRecord: SaleRecord = {
+        id: payload.saleId,
+        businessId,
+        cashierUid,
+        totalAmount: payload.totalAmount,
+        totalUnits: payload.totalUnits,
+        items: payload.items,
+        paymentMethod: payload.paymentMethod,
+        paymentStatus: payload.paymentStatus,
+        customerId: payload.customerId,
+        customerName: payload.customerName,
+        timestamp: now,
+        notes: payload.notes,
+      };
+
+      transaction.set(saleRef, {
+        ...saleRecord,
+        createdAt: serverTimestamp(),
+      });
+
+      // 4. If partial or credit, update customer credit account
+      if (payload.paymentStatus !== "paid" && payload.customerName) {
+        const customerId = payload.customerId || `cust_${Date.now()}`;
+        const custRef = doc(db, "businesses", businessId, "customers", customerId);
+        const outstanding = payload.totalAmount - (payload.amountPaid || 0);
+
+        transaction.set(
+          custRef,
+          {
+            id: customerId,
+            businessId,
+            customerName: payload.customerName,
+            amountOutstanding: outstanding,
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      }
+
+      // 5. Append immutable audit entry
+      const auditId = `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const auditRef = doc(db, "businesses", businessId, "auditLogs", auditId);
+      transaction.set(auditRef, {
+        id: auditId,
+        businessId,
+        actorUid: cashierUid,
+        action: "POS_SALE_COMPLETED",
+        entityType: "sales",
+        entityId: payload.saleId,
+        details: `Sale of ${payload.totalUnits} items totaling ${payload.totalAmount} completed via ${payload.paymentMethod}.`,
+        timestamp: now,
+      });
+    });
+
+    return { success: true, saleId: payload.saleId, movements: createdMovements };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `businesses/${businessId}/sales/${payload.saleId}`);
+    throw error;
+  }
+}
+
+// ============================================================================
+// TENANT SUBCOLLECTION REAL-TIME SUBSCRIPTIONS & MUTATIONS
+// ============================================================================
+
+export function subscribeToTenantSales(
+  businessId: string,
+  onSales: (sales: SaleRecord[]) => void
+): () => void {
+  if (!businessId) return () => {};
+  const path = `businesses/${businessId}/sales`;
+  try {
+    const colRef = collection(db, path);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const sales: SaleRecord[] = [];
+        snapshot.forEach((docSnap) => sales.push(docSnap.data() as SaleRecord));
+        sales.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        onSales(sales);
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, path)
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return () => {};
+  }
+}
+
+export function subscribeToTenantStockMovements(
+  businessId: string,
+  onMovements: (movements: StockMovement[]) => void
+): () => void {
+  if (!businessId) return () => {};
+  const path = `businesses/${businessId}/stockMovements`;
+  try {
+    const colRef = collection(db, path);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const movements: StockMovement[] = [];
+        snapshot.forEach((docSnap) => movements.push(docSnap.data() as StockMovement));
+        movements.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        onMovements(movements);
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, path)
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return () => {};
+  }
+}
+
+export function subscribeToTenantCustomers(
+  businessId: string,
+  onCustomers: (customers: Customer[]) => void
+): () => void {
+  if (!businessId) return () => {};
+  const path = `businesses/${businessId}/customers`;
+  try {
+    const colRef = collection(db, path);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const customers: Customer[] = [];
+        snapshot.forEach((docSnap) => customers.push(docSnap.data() as Customer));
+        onCustomers(customers);
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, path)
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return () => {};
+  }
+}
+
+export function subscribeToTenantExpenses(
+  businessId: string,
+  onExpenses: (expenses: Expense[]) => void
+): () => void {
+  if (!businessId) return () => {};
+  const path = `businesses/${businessId}/expenses`;
+  try {
+    const colRef = collection(db, path);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const expenses: Expense[] = [];
+        snapshot.forEach((docSnap) => expenses.push(docSnap.data() as Expense));
+        expenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        onExpenses(expenses);
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, path)
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return () => {};
+  }
+}
+
+export function subscribeToTenantSuppliers(
+  businessId: string,
+  onSuppliers: (suppliers: Supplier[]) => void
+): () => void {
+  if (!businessId) return () => {};
+  const path = `businesses/${businessId}/suppliers`;
+  try {
+    const colRef = collection(db, path);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const suppliers: Supplier[] = [];
+        snapshot.forEach((docSnap) => suppliers.push(docSnap.data() as Supplier));
+        onSuppliers(suppliers);
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, path)
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return () => {};
+  }
+}
+
+export function subscribeToTenantCashTransactions(
+  businessId: string,
+  onTransactions: (transactions: CashTransaction[]) => void
+): () => void {
+  if (!businessId) return () => {};
+  const path = `businesses/${businessId}/cashTransactions`;
+  try {
+    const colRef = collection(db, path);
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const txs: CashTransaction[] = [];
+        snapshot.forEach((docSnap) => txs.push(docSnap.data() as CashTransaction));
+        txs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        onTransactions(txs);
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, path)
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+    return () => {};
+  }
+}
+
+export async function saveExpenseToBusinessFirestore(businessId: string, expense: Expense): Promise<void> {
+  if (!businessId || !expense?.id) return;
+  const path = `businesses/${businessId}/expenses`;
+  try {
+    await setDoc(doc(db, path, expense.id), { ...expense, businessId, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${path}/${expense.id}`);
+  }
+}
+
+export async function deleteExpenseFromBusinessFirestore(businessId: string, expenseId: string): Promise<void> {
+  if (!businessId || !expenseId) return;
+  const path = `businesses/${businessId}/expenses`;
+  try {
+    await deleteDoc(doc(db, path, expenseId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${path}/${expenseId}`);
+  }
+}
+
+export async function saveSupplierToBusinessFirestore(businessId: string, supplier: Supplier): Promise<void> {
+  if (!businessId || !supplier?.id) return;
+  const path = `businesses/${businessId}/suppliers`;
+  try {
+    await setDoc(doc(db, path, supplier.id), { ...supplier, businessId, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${path}/${supplier.id}`);
+  }
+}
+
+export async function deleteSupplierFromBusinessFirestore(businessId: string, supplierId: string): Promise<void> {
+  if (!businessId || !supplierId) return;
+  const path = `businesses/${businessId}/suppliers`;
+  try {
+    await deleteDoc(doc(db, path, supplierId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${path}/${supplierId}`);
+  }
+}
+
+export async function saveCustomerToBusinessFirestore(businessId: string, customer: Customer): Promise<void> {
+  if (!businessId || !customer?.id) return;
+  const path = `businesses/${businessId}/customers`;
+  try {
+    await setDoc(doc(db, path, customer.id), { ...customer, businessId, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${path}/${customer.id}`);
+  }
+}
+
+export async function deleteCustomerFromBusinessFirestore(businessId: string, customerId: string): Promise<void> {
+  if (!businessId || !customerId) return;
+  const path = `businesses/${businessId}/customers`;
+  try {
+    await deleteDoc(doc(db, path, customerId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${path}/${customerId}`);
+  }
+}
+
+export async function saveCashTransactionToBusinessFirestore(businessId: string, tx: CashTransaction): Promise<void> {
+  if (!businessId || !tx?.id) return;
+  const path = `businesses/${businessId}/cashTransactions`;
+  try {
+    await setDoc(doc(db, path, tx.id), { ...tx, businessId, createdAt: serverTimestamp() }, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${path}/${tx.id}`);
   }
 }
 

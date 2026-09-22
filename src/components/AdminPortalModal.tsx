@@ -142,40 +142,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   const [annType, setAnnType] = useState<"info" | "warning" | "success" | "maintenance">("info");
   const [annPriority, setAnnPriority] = useState<"normal" | "urgent">("normal");
 
-  // Local state for broadcast announcements list
-  const [localAnnouncements, setLocalAnnouncements] = useState<SystemAnnouncement[]>([
-    {
-      id: "ann-01",
-      title: "Scheduled Maintenance Window",
-      message: "Zero-downtime database optimization scheduled for Sunday at 02:00 UTC.",
-      type: "maintenance",
-      priority: "normal",
-      createdAt: new Date().toISOString(),
-      createdBy: "INCO Master Admin",
-      active: true,
-    },
-    {
-      id: "ann-02",
-      title: "INCO Pro AI Barcode Engine 2.0 Live",
-      message: "High-speed camera tallying is now 3x faster on low-light devices.",
-      type: "info",
-      priority: "normal",
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      createdBy: "INCO Master Admin",
-      active: true,
-    },
-  ]);
+  // Local state for broadcast announcements list (fresh production starts empty)
+  const [localAnnouncements, setLocalAnnouncements] = useState<SystemAnnouncement[]>([]);
 
-  // Local telemetry stream of real-time store events
-  const [telemetryLogs] = useState<
+  // Telemetry stream of real-time store events (fresh production starts empty)
+  const [telemetryLogs, setTelemetryLogs] = useState<
     Array<{ id: string; time: string; store: string; action: string; type: "sale" | "restock" | "audit" | "login" | "kyc" }>
-  >([
-    { id: "tel-1", time: "Just now", store: "David Provisions", action: "Quick Cash Sale ($34.50)", type: "sale" },
-    { id: "tel-2", time: "2m ago", store: "Kiosk Mart 24", action: "Restocked 50 Beverage units", type: "restock" },
-    { id: "tel-3", time: "5m ago", store: "Metro Mini Mart", action: "Completed full shelf audit (34 SKUs)", type: "audit" },
-    { id: "tel-4", time: "12m ago", store: "Sunrise Pharmacy", action: "KYC ID Document uploaded", type: "kyc" },
-    { id: "tel-5", time: "25m ago", store: "Central Wholesale", action: "Merchant logged in via terminal", type: "login" },
-  ]);
+  >([]);
 
   // Lockout Timer Countdown
   useEffect(() => {
@@ -1081,16 +1054,26 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                   <table className="w-full text-left text-sm text-slate-300">
                     <thead className="bg-slate-900/90 text-xs uppercase font-extrabold text-slate-400 border-b border-slate-800">
                       <tr>
-                        <th className="p-4">Merchant / Store</th>
-                        <th className="p-4">Contact</th>
-                        <th className="p-4">Plan Tier</th>
-                        <th className="p-4">Status & Badges</th>
+                        <th className="p-4">Merchant & UID</th>
+                        <th className="p-4">Email</th>
+                        <th className="p-4">Business / Store</th>
+                        <th className="p-4">Role</th>
+                        <th className="p-4">Created Date</th>
+                        <th className="p-4">Status & Plan</th>
                         <th className="p-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/70">
                       {filteredUsers.map((user) => {
                         const isUserAdmin = user.identifier.toLowerCase() === SUPER_ADMIN_EMAIL;
+                        const userUid = (user as any).uid || user.id;
+                        const createdDateStr = user.createdAt
+                          ? new Date(user.createdAt).toLocaleDateString(undefined, {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })
+                          : "Recent";
                         return (
                           <tr key={user.id} className="hover:bg-slate-900/60 transition-colors">
                             <td className="p-4">
@@ -1109,41 +1092,67 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-xs sm:text-sm text-slate-400 font-medium">
-                                    {user.storeName || "Retail Kiosk"}
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                                      UID: {userUid.slice(0, 10)}...
+                                    </span>
                                   </div>
                                 </div>
                               </div>
                             </td>
 
-                            <td className="p-4 font-mono text-xs sm:text-sm text-slate-300">
+                            <td className="p-4 font-mono text-xs text-slate-300">
                               {user.identifier}
                             </td>
 
-                            <td className="p-4">
-                              <span
-                                className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase ${
-                                  user.subscription?.plan === "INCO Pro AI"
-                                    ? "bg-amber-400/20 text-amber-400 border border-amber-400/40"
-                                    : "bg-slate-800 text-slate-400"
-                                }`}
-                              >
-                                {user.subscription?.plan || "Free Starter"}
-                              </span>
+                            <td className="p-4 text-xs font-semibold text-slate-300">
+                              <div>{user.storeName || "Retail Kiosk"}</div>
+                              {(user as any).activeBusinessId && (
+                                <div className="font-mono text-[10px] text-slate-400 truncate max-w-[120px]">
+                                  {(user as any).activeBusinessId}
+                                </div>
+                              )}
                             </td>
 
                             <td className="p-4">
                               <span
-                                className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
-                                  user.accountStatus === "active"
-                                    ? "bg-emerald-950 text-emerald-400 border border-emerald-500/40"
-                                    : user.accountStatus === "suspended"
-                                    ? "bg-amber-950 text-amber-400 border border-amber-500/40"
-                                    : "bg-rose-950 text-rose-400 border border-rose-500/40"
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
+                                  user.role === "admin"
+                                    ? "bg-amber-400/20 text-amber-400 border border-amber-400/40"
+                                    : "bg-slate-800 text-slate-300 border border-slate-700"
                                 }`}
                               >
-                                {user.accountStatus || "active"}
+                                {user.role || "merchant"}
                               </span>
+                            </td>
+
+                            <td className="p-4 text-xs font-medium text-slate-400">
+                              {createdDateStr}
+                            </td>
+
+                            <td className="p-4">
+                              <div className="flex flex-col gap-1 items-start">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${
+                                    user.accountStatus === "active"
+                                      ? "bg-emerald-950 text-emerald-400 border border-emerald-500/40"
+                                      : user.accountStatus === "suspended"
+                                      ? "bg-amber-950 text-amber-400 border border-amber-500/40"
+                                      : "bg-rose-950 text-rose-400 border border-rose-500/40"
+                                  }`}
+                                >
+                                  {user.accountStatus || "active"}
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                    user.subscription?.plan === "INCO Pro AI"
+                                      ? "bg-amber-400/20 text-amber-400"
+                                      : "bg-slate-800 text-slate-400"
+                                  }`}
+                                >
+                                  {user.subscription?.plan || "Free Starter"}
+                                </span>
+                              </div>
                             </td>
 
                             <td className="p-4 text-right">

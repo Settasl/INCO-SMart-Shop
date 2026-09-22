@@ -14,7 +14,7 @@ import {
   RefreshCw,
   Boxes,
 } from "lucide-react";
-import { InventoryItem, Category, StoreSettings } from "../types";
+import { InventoryItem, Category, Unit, StoreSettings } from "../types";
 import { CATEGORIES } from "../data/sampleData";
 import { sounds } from "../lib/sound";
 
@@ -128,7 +128,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
       // 7. Unit
       if (unitMode === "change" && newUnit) {
-        changes.unit = newUnit.trim();
+        changes.unit = newUnit.trim() as Unit;
       }
 
       return { id: item.id, changes };
@@ -241,7 +241,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-hidden focus:border-amber-400"
                   >
                     <option value="KEEP">— Keep Existing Categories —</option>
-                    {CATEGORIES.filter((c) => c !== "All").map((cat) => (
+                    {CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
                         Change to: {cat}
                       </option>

@@ -293,6 +293,11 @@ export const LowStockEmailModal: React.FC<LowStockEmailModalProps> = ({
                 <ExternalLink className="w-3 h-3" />
               </button>
             </div>
+
+            <div className="pt-1 text-[10px] text-slate-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+              <span>Sender Domain: <strong className="text-slate-200">alerts@foirosi.resend.app</strong></span>
+            </div>
           </form>
 
           {/* List of Flagged Products Preview */}

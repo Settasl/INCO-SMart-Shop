@@ -6,11 +6,11 @@ import {
   signInWithEmail,
   signUpWithEmail,
   signInWithGoogle,
-  signInWithGoogleEmail,
   signInWithApple,
-  signInWithAppleEmail,
   sendPasswordReset,
   signOutUser,
+  updateUserPassword,
+  deleteCurrentUserAccount,
 } from "../lib/firebase";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -31,12 +31,12 @@ export interface AuthContextValue {
   isLoading: boolean;
   error: string | null;
   signIn: (email: string, pass: string) => Promise<User>;
-  signUp: (email: string, pass: string, displayName: string) => Promise<User>;
-  signInWithGoogleAuth: (fallbackEmail?: string) => Promise<User>;
-  signInWithGoogleDirectEmail: (email: string, displayName?: string) => Promise<User>;
-  signInWithAppleAuth: (fallbackEmail?: string) => Promise<User>;
-  signInWithAppleDirectEmail: (email: string, displayName?: string) => Promise<User>;
+  signUp: (email: string, pass: string, displayName: string, storeName?: string) => Promise<User>;
+  signInWithGoogleAuth: (hintEmail?: string) => Promise<User>;
+  signInWithAppleAuth: () => Promise<User>;
   resetPassword: (email: string) => Promise<void>;
+  changePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
+  deleteAccount: (currentPassword?: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
 }
@@ -90,10 +90,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const handleSignUp = async (email: string, pass: string, displayName: string): Promise<User> => {
+  const handleSignUp = async (email: string, pass: string, displayName: string, storeName?: string): Promise<User> => {
     try {
       setError(null);
-      return await signUpWithEmail(email, pass, displayName);
+      return await signUpWithEmail(email, pass, displayName, storeName);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to register account";
       setError(msg);
@@ -112,34 +112,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const handleGoogleDirectEmail = async (email: string, displayName?: string): Promise<User> => {
+  const handleAppleSignIn = async (): Promise<User> => {
     try {
       setError(null);
-      return await signInWithGoogleEmail(email, displayName);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Google email authentication failed";
-      setError(msg);
-      throw err;
-    }
-  };
-
-  const handleAppleSignIn = async (fallbackEmail?: string): Promise<User> => {
-    try {
-      setError(null);
-      return await signInWithApple(fallbackEmail);
+      return await signInWithApple();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Apple sign in was cancelled or failed";
-      setError(msg);
-      throw err;
-    }
-  };
-
-  const handleAppleDirectEmail = async (email: string, displayName?: string): Promise<User> => {
-    try {
-      setError(null);
-      return await signInWithAppleEmail(email, displayName);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Apple ID authentication failed";
       setError(msg);
       throw err;
     }
@@ -151,6 +129,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await sendPasswordReset(email);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send password reset email";
+      setError(msg);
+      throw err;
+    }
+  };
+
+  const handleChangePassword = async (newPassword: string, currentPassword?: string) => {
+    try {
+      setError(null);
+      await updateUserPassword(newPassword, currentPassword);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to change password";
+      setError(msg);
+      throw err;
+    }
+  };
+
+  const handleDeleteAccount = async (currentPassword?: string) => {
+    try {
+      setError(null);
+      await deleteCurrentUserAccount(currentPassword);
+      setUser(null);
+      setStatus("unauthenticated");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to delete account";
       setError(msg);
       throw err;
     }
@@ -178,10 +180,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signIn: handleSignIn,
     signUp: handleSignUp,
     signInWithGoogleAuth: handleGoogleSignIn,
-    signInWithGoogleDirectEmail: handleGoogleDirectEmail,
     signInWithAppleAuth: handleAppleSignIn,
-    signInWithAppleDirectEmail: handleAppleDirectEmail,
     resetPassword: handleResetPassword,
+    changePassword: handleChangePassword,
+    deleteAccount: handleDeleteAccount,
     signOut: handleSignOut,
     clearError,
   };

@@ -21,7 +21,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isSignedIn() && (
+        request.auth.token.email == 'settaholdings@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
     }
 
     function isBusinessMember(businessId) {
@@ -52,9 +55,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwnerOf(userId) || isAdmin();
       allow create: if isOwnerOf(userId) && isValidId(userId)
-                    && request.resource.data.uid == request.auth.uid;
+                    && request.resource.data.uid == request.auth.uid
+                    && (!('role' in request.resource.data) || request.resource.data.role != 'admin' || isAdmin());
       allow update: if (isOwnerOf(userId) || isAdmin())
-                    && request.resource.data.uid == resource.data.uid;
+                    && request.resource.data.uid == resource.data.uid
+                    && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role || isAdmin());
       allow delete: if isAdmin();
     }
 
@@ -64,10 +69,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- CONNECTION TEST ---
+    match /test/connection {
+      allow read: if true;
+    }
+
     // --- TENANT BUSINESSES & SUBCOLLECTIONS ---
     match /businesses/{businessId} {
-      // Any verified member of the business or platform admin can read the business doc
-      allow read: if isBusinessMember(businessId) || isAdmin();
+      // Business owner, verified members, or platform admin can read the business doc
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        isBusinessMember(businessId) ||
+        isAdmin()
+      );
       
       // Creating a new business: user must set themselves as owner
       allow create: if isSignedIn() && isValidId(businessId)
@@ -83,7 +97,12 @@ service cloud.firestore {
 
       // --- MEMBERSHIP & ROLES (RBAC) ---
       match /members/{memberUid} {
-        allow read: if isBusinessMember(businessId) || isAdmin();
+        // Members can read their own membership, verified business members, or admin
+        allow read: if isSignedIn() && (
+          isOwnerOf(memberUid) ||
+          isBusinessMember(businessId) ||
+          isAdmin()
+        );
         
         // Onboarding: owner can create their own member record if they own the business doc
         // Or existing owner/manager can add other members
@@ -141,11 +160,74 @@ service cloud.firestore {
         allow update, delete: if isBusinessManager(businessId);
       }
 
+      // --- ORDERS ---
+      match /orders/{orderId} {
+        allow read: if isBusinessMember(businessId);
+        allow create, update: if isBusinessStaff(businessId);
+        allow delete: if isBusinessManager(businessId);
+      }
+
       // --- CUSTOMERS & CREDIT BOOK ---
       match /customers/{customerId} {
         allow read: if isBusinessMember(businessId);
         allow create, update: if isBusinessStaff(businessId);
         allow delete: if isBusinessManager(businessId);
+      }
+
+      // --- CREDIT ACCOUNTS & TRANSACTIONS ---
+      match /creditAccounts/{creditId} {
+        allow read: if isBusinessMember(businessId);
+        allow create, update: if isBusinessStaff(businessId);
+        allow delete: if isBusinessManager(businessId);
+      }
+      match /creditTransactions/{transactionId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if isBusinessStaff(businessId);
+        allow update, delete: if false;
+      }
+
+      // --- EXPENSES ---
+      match /expenses/{expenseId} {
+        allow read: if isBusinessMember(businessId);
+        allow create, update: if isBusinessStaff(businessId);
+        allow delete: if isBusinessManager(businessId);
+      }
+
+      // --- SUPPLIERS ---
+      match /suppliers/{supplierId} {
+        allow read: if isBusinessMember(businessId);
+        allow create, update: if isBusinessStaff(businessId);
+        allow delete: if isBusinessManager(businessId);
+      }
+
+      // --- PAYMENTS & CASH TRANSACTIONS ---
+      match /payments/{paymentId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if isBusinessStaff(businessId);
+        allow update, delete: if isBusinessManager(businessId);
+      }
+      match /cashTransactions/{transactionId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if isBusinessStaff(businessId);
+        allow update, delete: if isBusinessManager(businessId);
+      }
+
+      // --- NOTIFICATIONS ---
+      match /notifications/{notificationId} {
+        allow read: if isBusinessMember(businessId);
+        allow create, update, delete: if isBusinessStaff(businessId);
+      }
+
+      // --- SETTINGS ---
+      match /settings/{settingId} {
+        allow read: if isBusinessMember(businessId);
+        allow write: if isBusinessManager(businessId);
+      }
+
+      // --- REPORTS ---
+      match /reports/{reportId} {
+        allow read: if isBusinessMember(businessId);
+        allow write: if isBusinessManager(businessId);
       }
 
       // --- IMMUTABLE AUDIT LOGS ---

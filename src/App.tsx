@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import confetti from "canvas-confetti";
 import { Header } from "./components/Header";
 import { QuickTallyView } from "./components/QuickTallyView";
@@ -30,6 +30,13 @@ import { SubscriptionModal } from "./components/SubscriptionModal";
 import { ToolsPageView } from "./components/ToolsPageView";
 import { SalesSuccessOverlay, SaleSuccessInfo } from "./components/SalesSuccessOverlay";
 import { SalePaymentDetails } from "./components/QuickSaleModal";
+import { GlobalMenuDrawer } from "./components/GlobalMenuDrawer";
+import { DashboardView } from "./components/DashboardView";
+import { POSView } from "./components/POSView";
+import { ProductsView } from "./components/ProductsView";
+import { ReportsView } from "./components/ReportsView";
+import { ProfileView } from "./components/ProfileView";
+import { SalesView } from "./components/SalesView";
 import {
   InventoryItem,
   StockMovement,
@@ -65,6 +72,10 @@ import {
   deleteItemFromBusinessFirestore,
   subscribeToTenantItems,
   syncItemsToBusinessFirestore,
+  executeSaleTransactionAtomic,
+  fetchAllUsersFromFirestore,
+  updateUserInFirestore,
+  deleteUserFromFirestore,
 } from "./lib/firebase";
 import { useAuth } from "./context/AuthContext";
 import { useBusiness } from "./context/BusinessContext";
@@ -80,90 +91,19 @@ const DEFAULT_SETTINGS: StoreSettings = {
   darkMode: true,
 };
 
-const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
-  {
-    id: "chat-1",
-    channelId: "support",
-    senderId: "inco-support-desk",
-    senderName: "INCO Support Headphone Desk",
-    senderAvatar:
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
-    senderRole: "admin",
-    isVerified: true,
-    content:
-      "Welcome to INCO Smart Shop Customer Service! 🎧 Our live support team and assistant are ready 24/7. How can we assist your store counter today?",
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    status: "delivered",
-  },
-  {
-    id: "chat-2",
-    channelId: "support",
-    senderId: "merchant-sarah",
-    senderName: "Sarah's Mini Mart",
-    senderAvatar:
-      "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=120&auto=format&fit=crop&q=80",
-    senderRole: "user",
-    isVerified: true,
-    content:
-      "Hey store owners! Just got my KYC approved by INCO admin. Fast barcode scanning has sped up our morning restocks immensely! 🚀",
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-    status: "delivered",
-  },
-];
+const INITIAL_CHAT_MESSAGES: ChatMessage[] = [];
 
-const INITIAL_PAYMENT_REQUESTS: PaymentRequest[] = [
-  {
-    id: "pay-req-1",
-    userId: "usr-david-01",
-    userEmailOrPhone: "david.retail@inco.app",
-    userName: "David Retail Kiosk",
-    planName: "INCO Pro AI",
-    amount: 4.99,
-    currency: "USD",
-    paymentMethod: "Mobile Money (M-Pesa/MTN)",
-    transactionRef: "OM-883921",
-    status: "pending",
-    submittedAt: new Date(Date.now() - 1800000).toISOString(),
-  },
-  {
-    id: "pay-req-2",
-    userId: "usr-fatou-02",
-    userEmailOrPhone: "+231778901234",
-    userName: "Fatou Provisions",
-    planName: "INCO Pro AI",
-    amount: 4.99,
-    currency: "USD",
-    paymentMethod: "Mobile Money (M-Pesa/MTN)",
-    transactionRef: "MOMO-449102",
-    status: "pending",
-    submittedAt: new Date(Date.now() - 7200000).toISOString(),
-  },
-];
+const INITIAL_PAYMENT_REQUESTS: PaymentRequest[] = [];
 
-const INITIAL_VERIFICATION_REQUESTS: VerificationRequest[] = [
-  {
-    id: "ver-req-1",
-    userId: "usr-david-01",
-    userEmailOrPhone: "david.retail@inco.app",
-    userName: "David Retail Kiosk",
-    legalName: "David Retail Enterprises",
-    idType: "National ID",
-    idNumber: "BP-MONROVIA-2025-99",
-    passportPhotoUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-    idDocUrl:
-      "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&auto=format&fit=crop&q=80",
-    status: "pending",
-    submittedAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
+const INITIAL_VERIFICATION_REQUESTS: VerificationRequest[] = [];
 
 export function App() {
   const { user: fbUser, signOut: fbSignOut } = useAuth();
   const { activeBusinessId, activeBusiness, userRole, canEdit, canAdmin } = useBusiness();
 
-  // Navigation & Page State ("stock" | "valuation" | "reports" | "suppliers" | "tools")
-  const [activeView, setActiveView] = useState<string>("stock");
+  // Navigation & Page State ("dashboard" | "pos" | "products" | "reports" | "profile" | "sales" | "stock" | "valuation" | "suppliers" | "tools")
+  const [activeView, setActiveView] = useState<string>("dashboard");
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [showSplash, setShowSplash] = useState<boolean>(() => {
     return !localStorage.getItem("inco_splash_dismissed");
   });
@@ -251,7 +191,7 @@ export function App() {
 
   const [cashAtHand, setCashAtHand] = useState<number>(() => {
     const saved = localStorage.getItem("inco_cash_at_hand");
-    return saved ? parseFloat(saved) : 1450.0;
+    return saved ? parseFloat(saved) : 0.0;
   });
 
   const [settings, setSettings] = useState<StoreSettings>(() => {
@@ -262,7 +202,7 @@ export function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("inco_dark_mode");
     if (saved !== null) return JSON.parse(saved);
-    return true; // Default dark mode for vibrant yellow & black theme
+    return false; // Default clean, bright, premium UI as specified
   });
 
   // Filter & Search state
@@ -379,8 +319,26 @@ export function App() {
     localStorage.setItem("inco_verification_requests", JSON.stringify(verificationRequests));
   }, [verificationRequests]);
 
+  // Admin Users List from Firestore
+  const [adminUsersList, setAdminUsersList] = useState<UserProfile[]>([]);
+
+  const refreshAdminUsers = useCallback(async () => {
+    try {
+      const fsUsers = await fetchAllUsersFromFirestore();
+      if (Array.isArray(fsUsers) && fsUsers.length > 0) {
+        setAdminUsersList(fsUsers);
+        return;
+      }
+    } catch (e) {
+      console.warn("[Admin] Firestore user fetch error:", e);
+    }
+    setAdminUsersList(loadRegisteredAccounts().map(convertAccountToUserProfile));
+  }, []);
+
   // Initial and reactive sync of registered users with the backend database
   useEffect(() => {
+    refreshAdminUsers();
+
     // 1. Sync on mount
     syncUsersWithServer()
       .then((synced) => {
@@ -392,6 +350,7 @@ export function App() {
 
     // 2. Listen to local and cross-tab user account updates
     const handleRemoteUsersUpdate = () => {
+      refreshAdminUsers();
       syncUsersWithServer()
         .then((synced) => {
           if (Array.isArray(synced) && synced.length > 0) {
@@ -1017,20 +976,30 @@ export function App() {
     }
 
     if (activeBusinessId) {
-      recordAuditLog({
-        businessId: activeBusinessId,
-        userId: fbUser?.uid || "user",
-        userEmail: fbUser?.email || "user",
-        action: "SALE",
-        entityType: "sale",
-        entityId: "sale-" + Date.now(),
-        newData: {
-          totalAmount,
-          cashCollected,
-          customerName: paymentDetails?.customerName || "Walk-in",
-          itemCount: cart.length,
-        },
-      }).catch(() => {});
+      const saleId = "sale-" + Date.now();
+      const saleItems = cart.map((c) => ({
+        itemId: c.item.id,
+        itemName: c.item.name,
+        quantity: c.quantity,
+        unitPrice: c.item.sellingPrice,
+        costPrice: c.item.costPrice,
+        unit: c.item.unit,
+      }));
+      const totalUnits = cart.reduce((sum, c) => sum + c.quantity, 0);
+
+      executeSaleTransactionAtomic(activeBusinessId, {
+        saleId,
+        items: saleItems,
+        totalAmount,
+        totalUnits,
+        paymentMethod: paymentDetails?.paymentMethod || "Cash at Hand",
+        amountPaid: paymentDetails?.amountPaid ?? totalAmount,
+        paymentStatus: paymentDetails?.paymentStatus || "paid",
+        customerName: paymentDetails?.customerName || "Walk-in",
+        notes: paymentDetails?.notes,
+      }).catch((err) => {
+        console.warn("Atomic sale sync notice:", err);
+      });
     }
 
     if (userPhoneOrEmail) {
@@ -1164,8 +1133,8 @@ export function App() {
   return (
     <div
       className={`min-h-screen relative ${
-        darkMode ? "dark bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-950"
-      } font-sans antialiased flex flex-col selection:bg-amber-400 selection:text-slate-950 transition-colors duration-200`}
+        darkMode ? "dark bg-[#1E1E1E] text-slate-100" : "bg-[#F8F9FA] text-[#252525]"
+      } font-sans antialiased flex flex-col selection:bg-[#E5F107] selection:text-[#252525] transition-colors duration-200`}
     >
       {/* Welcome Screen (Compact & High Contrast Black & Yellow Theme) */}
       {showSplash && (
@@ -1185,42 +1154,117 @@ export function App() {
       {/* PWA Install Banner */}
       <InstallAppBanner />
 
-      {/* Top Header: Dark Background with Yellow & White Icons, Texts, Buttons & Navigation Links */}
+      {/* Top Header: Dark Background with Minimal Headings & Menu Trigger */}
       <Header
         activeView={activeView}
         onSelectView={setActiveView}
         settings={settings}
         userPhoneOrEmail={userPhoneOrEmail}
         userProfile={userProfile}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onOpenScanner={() => {
-          setTargetItemForAssign(null);
-          setIsScannerOpen(true);
-        }}
-        onOpenNotifications={() => setIsChatOpen(true)}
-        onOpenChat={() => setIsChatOpen(true)}
-        onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenMenu={() => setIsMenuOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
-        onOpenToolsDrawer={() => setActiveView("tools")}
-        onToggleDarkMode={handleToggleDarkMode}
-        darkMode={darkMode}
+        onOpenProfile={() => setActiveView("profile")}
+        onOpenQuickSale={() => setActiveView("pos")}
+        onEnterWelcome={() => setShowSplash(true)}
       />
 
       {/* Toast Notification Banner */}
       {toast && (
         <div
           role="status"
-          className="fixed top-16 right-4 z-50 bg-slate-950 text-white font-bold text-xs px-4 py-2.5 rounded-2xl shadow-xl border border-amber-400 animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2 max-w-md"
+          className="fixed top-16 right-4 z-50 bg-[#252525] text-white font-bold text-xs px-4 py-2.5 rounded-2xl shadow-xl border border-[#E5F107] animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2 max-w-md"
         >
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0 animate-ping" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#E5F107] shrink-0 animate-ping" />
           <span>{toast.message}</span>
         </div>
       )}
 
       {/* Main Multi-Page Canvas Area */}
       <main className="flex-1 p-3 sm:p-5 lg:p-6 space-y-4 max-w-7xl w-full mx-auto pb-24 md:pb-8">
-        {/* PAGE 1: STOCK (HOME) - Per user requirement: Only Header, Quick Sales, and Products */}
+        {/* NEW WORLD-CLASS DASHBOARD VIEW */}
+        {activeView === "dashboard" && (
+          <DashboardView
+            settings={settings}
+            userProfile={userProfile}
+            items={items}
+            movements={movements}
+            onNavigateTo={setActiveView}
+            onOpenQuickSale={() => setActiveView("pos")}
+            onOpenScanner={() => {
+              setTargetItemForAssign(null);
+              setIsScannerOpen(true);
+            }}
+            onOpenNotifications={() => setIsChatOpen(true)}
+          />
+        )}
+
+        {/* NEW WORLD-CLASS SMART POS VIEW */}
+        {activeView === "pos" && (
+          <POSView
+            items={items}
+            settings={settings}
+            onCompleteSale={(cart, total, paymentMethod) => {
+              // Add to movements and complete sale
+              cart.forEach(({ item, quantity }) => {
+                handleUpdateQuantity(item.id, -quantity, `POS Sale: ${item.name}`);
+              });
+              setCashAtHand((prev) => prev + total);
+              showToast(`Sale recorded successfully! Total: $${total.toFixed(2)}`, "success");
+            }}
+            onOpenScanner={() => {
+              setTargetItemForAssign(null);
+              setIsScannerOpen(true);
+            }}
+            onShowToast={showToast}
+          />
+        )}
+
+        {/* NEW WORLD-CLASS PRODUCTS MANAGEMENT VIEW */}
+        {activeView === "products" && (
+          <ProductsView
+            items={items}
+            settings={settings}
+            onAddItem={handleAddItem}
+            onUpdateItem={handleUpdateItem}
+            onDeleteItem={handleDeleteItem}
+            onUpdateQuantity={handleUpdateQuantity}
+          />
+        )}
+
+        {/* NEW WORLD-CLASS REPORTS VIEW */}
+        {activeView === "reports" && (
+          <ReportsView
+            settings={settings}
+            movements={movements}
+            items={items}
+          />
+        )}
+
+        {/* NEW WORLD-CLASS USER PROFILE VIEW */}
+        {activeView === "profile" && (
+          <ProfileView
+            userProfile={userProfile}
+            settings={settings}
+            onUpdateProfile={handleUpdateProfile}
+            onShowToast={showToast}
+            onLogout={handleLogout}
+          />
+        )}
+
+        {/* NEW WORLD-CLASS SALES VIEW */}
+        {activeView === "sales" && (
+          <SalesView
+            settings={settings}
+            movements={movements}
+            onBack={() => setActiveView("dashboard")}
+            onOpenScanner={() => {
+              setTargetItemForAssign(null);
+              setIsScannerOpen(true);
+            }}
+          />
+        )}
+
+        {/* PAGE 1: STOCK (LEGACY HOME) - Available via Menu */}
         {activeView === "stock" && (
           <div className="space-y-4 animate-in fade-in duration-150">
             {/* Quick Sale Bar */}
@@ -1441,6 +1485,92 @@ export function App() {
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAdminPortal={() => setIsAdminPortalOpen(true)}
         onOpenSubscription={() => setIsSubscriptionOpen(true)}
+        onOpenMenu={() => setIsMenuOpen(true)}
+      />
+
+      {/* Global Comprehensive Menu Drawer Housing All Headings, Utilities & Administrative Tools */}
+      <GlobalMenuDrawer
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        activeView={activeView}
+        onSelectView={(view) => {
+          setIsMenuOpen(false);
+          setActiveView(view);
+        }}
+        userProfile={userProfile}
+        settings={settings}
+        darkMode={darkMode}
+        onToggleDarkMode={handleToggleDarkMode}
+        onOpenScanner={() => {
+          setIsMenuOpen(false);
+          setTargetItemForAssign(null);
+          setIsScannerOpen(true);
+        }}
+        onOpenQuickSale={() => {
+          setIsMenuOpen(false);
+          setIsQuickSaleOpen(true);
+        }}
+        onOpenStockValuation={() => {
+          setIsMenuOpen(false);
+          setIsStockValuationOpen(true);
+        }}
+        onOpenQuickRestock={() => {
+          setIsMenuOpen(false);
+          setIsQuickRestockOpen(true);
+        }}
+        onOpenSalesReport={() => {
+          setIsMenuOpen(false);
+          setIsSalesReportOpen(true);
+        }}
+        onOpenAIAssistant={() => {
+          setIsMenuOpen(false);
+          setIsAIAssistantOpen(true);
+        }}
+        onOpenWhatsappOrder={() => {
+          setIsMenuOpen(false);
+          setIsWhatsappOrderOpen(true);
+        }}
+        onOpenAudit={() => {
+          setIsMenuOpen(false);
+          setIsAuditOpen(true);
+        }}
+        onOpenPrintSheet={() => {
+          setIsMenuOpen(false);
+          setIsPrintSheetOpen(true);
+        }}
+        onOpenHistory={() => {
+          setIsMenuOpen(false);
+          setIsHistoryOpen(true);
+        }}
+        onOpenSettings={() => {
+          setIsMenuOpen(false);
+          setIsSettingsOpen(true);
+        }}
+        onOpenAuth={() => {
+          setIsMenuOpen(false);
+          setIsAuthOpen(true);
+        }}
+        onOpenChat={() => {
+          setIsMenuOpen(false);
+          setIsChatOpen(true);
+        }}
+        onOpenProfile={() => {
+          setIsMenuOpen(false);
+          setActiveView("profile");
+        }}
+        onOpenAdminPortal={() => {
+          setIsMenuOpen(false);
+          setIsAdminPortalOpen(true);
+        }}
+        onOpenSubscription={() => {
+          setIsMenuOpen(false);
+          setIsSubscriptionOpen(true);
+        }}
+        onOpenLowStockEmail={() => {
+          setIsMenuOpen(false);
+          setIsLowStockEmailOpen(true);
+        }}
+        onLogout={handleLogout}
       />
 
       {/* Modals & Dialogs */}
@@ -1491,19 +1621,16 @@ export function App() {
         currentUserProfile={userProfile}
         paymentRequests={paymentRequests}
         verificationRequests={verificationRequests}
-        allUsers={registeredAccounts.map(convertAccountToUserProfile)}
-        onRefreshUsers={async () => {
-          const fresh = await syncUsersWithServer();
-          if (Array.isArray(fresh) && fresh.length > 0) {
-            setRegisteredAccounts(fresh);
-          }
-        }}
+        allUsers={adminUsersList.length > 0 ? adminUsersList : registeredAccounts.map(convertAccountToUserProfile)}
+        onRefreshUsers={refreshAdminUsers}
         onApprovePayment={handleApprovePayment}
         onRejectPayment={handleRejectPayment}
         onApproveVerification={handleApproveVerification}
         onRejectVerification={handleRejectVerification}
         onUpdateUserAccount={async (userId, updates) => {
-          await updateUserOnBackend(userId, updates as any);
+          await updateUserInFirestore(userId, updates as any).catch((e) => console.warn(e));
+          await updateUserOnBackend(userId, updates as any).catch(() => {});
+          await refreshAdminUsers();
           const accounts = loadRegisteredAccounts();
           setRegisteredAccounts(accounts);
           if (currentAccount?.id === userId) {
@@ -1513,13 +1640,15 @@ export function App() {
               setActiveSessionUser(fresh);
             }
           }
-          showToast("User account profile updated by Admin", "success");
+          showToast("User account profile updated in Firestore", "success");
         }}
         onDeleteUserAccount={async (userId) => {
-          await deleteUserOnBackend(userId);
+          await deleteUserFromFirestore(userId).catch((e) => console.warn(e));
+          await deleteUserOnBackend(userId).catch(() => {});
+          await refreshAdminUsers();
           const accounts = loadRegisteredAccounts();
           setRegisteredAccounts(accounts);
-          showToast("User account removed by Admin", "info");
+          showToast("User account removed from Firestore", "info");
         }}
         onChangeAdminPassword={async (newPass) => {
           localStorage.setItem("inco_admin_master_password", newPass);

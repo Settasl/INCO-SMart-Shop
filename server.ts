@@ -72,37 +72,10 @@ export interface SystemAnnouncement {
   author: string;
 }
 
-// Initial Telemetry and Announcements
-const INITIAL_TELEMETRY: TelemetryEvent[] = [
-  {
-    id: "telem-init-1",
-    type: "signup",
-    storeName: "David Provisions & Mini Mart",
-    userIdentifier: "merchant@kiosk.com",
-    description: "New merchant registered account",
-    timestamp: new Date(Date.now() - 7200000).toISOString(),
-  },
-  {
-    id: "telem-init-2",
-    type: "sale",
-    storeName: "David Provisions & Mini Mart",
-    userIdentifier: "merchant@kiosk.com",
-    description: "POS sale completed: 4 items ($28.50)",
-    amount: 28.5,
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
+// Initial Telemetry and Announcements (strictly real records)
+const INITIAL_TELEMETRY: TelemetryEvent[] = [];
 
-const INITIAL_ANNOUNCEMENTS: SystemAnnouncement[] = [
-  {
-    id: "ann-01",
-    title: "INCO Smart Shop v4.0 Production Foundation Live",
-    message: "Multi-tenant architecture, Firebase authentication, hardened security rules, and real-time ledger are active.",
-    type: "feature",
-    createdAt: new Date().toISOString(),
-    author: "System Operations",
-  },
-];
+const INITIAL_ANNOUNCEMENTS: SystemAnnouncement[] = [];
 
 // File-based persistence setup
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -126,7 +99,7 @@ const DEFAULT_SERVER_USERS: BackendAccount[] = [
   {
     id: "user-super-admin-01",
     emailOrPhone: "settaholdings@gmail.com",
-    displayName: "INCO Master Admin (Setta SL)",
+    displayName: "INCO Master Admin",
     storeName: "INCO Headquarters",
     role: "admin",
     isVerified: true,
@@ -134,21 +107,8 @@ const DEFAULT_SERVER_USERS: BackendAccount[] = [
     accountStatus: "active",
     isPro: true,
     proExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3650).toISOString(),
-    avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
+    avatarUrl: "",
     createdAt: "2026-01-01T00:00:00.000Z",
-  },
-  {
-    id: "user-demo-merchant-02",
-    emailOrPhone: "merchant@kiosk.com",
-    displayName: "David Kiosk",
-    storeName: "David Provisions & Mini Mart",
-    role: "merchant",
-    isVerified: false,
-    verificationStatus: "none",
-    accountStatus: "active",
-    isPro: false,
-    avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=140&auto=format&fit=crop&q=80",
-    createdAt: "2026-02-15T00:00:00.000Z",
   },
 ];
 
@@ -809,33 +769,160 @@ app.post("/api/send-email-alert", async (req, res) => {
       return res.status(400).json({ error: "Invalid email alert payload", details: validation.error.issues });
     }
 
-    const { recipientEmail, storeName = "My Provision Store", lowStockItems = [] } = validation.data;
-    const totalEstRestockCost = lowStockItems.reduce(
-      (sum: number, item: any) =>
-        sum + Math.max(1, (item.reorderPoint || 5) * 2 - (item.quantity || 0)) * (item.costPrice || 0),
-      0
-    );
+    const { recipientEmail, storeName = "INCO Store", lowStockItems = [], currencySymbol = "$" } = validation.data;
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const sendgridApiKey = process.env.SENDGRID_API_KEY;
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    const postmarkApiKey = process.env.POSTMARK_SERVER_TOKEN;
+    const senderEmail = process.env.EMAIL_FROM || "INCO Store <alerts@foirosi.resend.app>";
 
-    const formattedDate = new Date().toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (!resendApiKey && !sendgridApiKey && !brevoApiKey && !postmarkApiKey) {
+      return res.status(503).json({
+        error: "Transactional email provider is not configured. Set RESEND_API_KEY in your environment variables to enable live delivery.",
+        providerConfigured: false,
+      });
+    }
 
-    console.log(`[LowStock Alert] Dispatched alert for "${storeName}" to <${recipientEmail}>. ${lowStockItems.length} items flagged.`);
+    const emailSubject = `[INCO Alert] Low Stock Summary for ${storeName} (${lowStockItems.length} items flagged)`;
+    const itemListHtml = (lowStockItems || [])
+      .map(
+        (item: any) =>
+          `<tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${item.name || "Item"}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #dc2626;">${item.quantity ?? 0} ${item.unit || "pcs"}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${item.reorderPoint ?? 5}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${currencySymbol}${(item.costPrice || 0).toFixed(2)}</td>
+          </tr>`
+      )
+      .join("");
 
-    res.json({
-      success: true,
-      message: `Low stock alert email successfully dispatched to ${recipientEmail}`,
-      dispatchedAt: new Date().toISOString(),
-      recipientEmail,
-      itemCount: lowStockItems.length,
-      estimatedRestockCost: totalEstRestockCost,
-      dateFormatted: formattedDate,
-    });
+    const emailHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #0f172a;">
+        <div style="background-color: #0f172a; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h2 style="color: #fbbf24; margin: 0;">INCO Smart Shop</h2>
+          <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 14px;">Urgent Stock Restock Alert</p>
+        </div>
+        <div style="background-color: #ffffff; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
+          <p>Hello,</p>
+          <p>This is an automated inventory alert for <strong>${storeName}</strong>. The following <strong>${lowStockItems.length}</strong> items have fallen below their configured reorder thresholds:</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+            <thead>
+              <tr style="background-color: #f8fafc; text-align: left;">
+                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0;">Product</th>
+                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0;">Current Stock</th>
+                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0;">Reorder Point</th>
+                <th style="padding: 8px; border-bottom: 2px solid #e2e8f0;">Unit Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemListHtml}
+            </tbody>
+          </table>
+          <p style="font-size: 13px; color: #64748b;">Please restock these items soon to prevent stockouts and missed customer sales.</p>
+        </div>
+      </div>
+    `;
+
+    // 1. Dispatch via Resend (Recommended & fastest)
+    if (resendApiKey) {
+      const resendRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: senderEmail,
+          to: [recipientEmail],
+          subject: emailSubject,
+          html: emailHtml,
+        }),
+      });
+
+      if (!resendRes.ok) {
+        const errorText = await resendRes.text();
+        return res.status(502).json({
+          error: "Resend email dispatch error",
+          details: errorText,
+        });
+      }
+
+      const resendJson = await resendRes.json();
+      return res.json({
+        success: true,
+        provider: "resend",
+        messageId: resendJson.id,
+        recipientEmail,
+        itemCount: lowStockItems.length,
+        dispatchedAt: new Date().toISOString(),
+      });
+    }
+
+    // 2. Dispatch via SendGrid
+    if (sendgridApiKey) {
+      const sgRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${sendgridApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: recipientEmail }] }],
+          from: { email: senderEmail },
+          subject: emailSubject,
+          content: [{ type: "text/html", value: emailHtml }],
+        }),
+      });
+
+      if (!sgRes.ok) {
+        const errorText = await sgRes.text();
+        return res.status(502).json({
+          error: "SendGrid email dispatch error",
+          details: errorText,
+        });
+      }
+
+      return res.json({
+        success: true,
+        provider: "sendgrid",
+        recipientEmail,
+        itemCount: lowStockItems.length,
+        dispatchedAt: new Date().toISOString(),
+      });
+    }
+
+    // 3. Dispatch via Brevo
+    if (brevoApiKey) {
+      const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": brevoApiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sender: { email: senderEmail, name: storeName },
+          to: [{ email: recipientEmail }],
+          subject: emailSubject,
+          htmlContent: emailHtml,
+        }),
+      });
+
+      if (!brevoRes.ok) {
+        const errorText = await brevoRes.text();
+        return res.status(502).json({
+          error: "Brevo email dispatch error",
+          details: errorText,
+        });
+      }
+
+      return res.json({
+        success: true,
+        provider: "brevo",
+        recipientEmail,
+        itemCount: lowStockItems.length,
+        dispatchedAt: new Date().toISOString(),
+      });
+    }
   } catch (error: unknown) {
     console.error("Error in /api/send-email-alert:", error);
     const msg = error instanceof Error ? error.message : "Failed to dispatch email alert.";

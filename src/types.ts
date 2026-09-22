@@ -3,6 +3,11 @@ export type Category =
   | "Shoes & Footwear"
   | "Clothing & Apparel"
   | "Electronics & Accessories"
+  | "Electronics"
+  | "Fashion"
+  | "Home"
+  | "Beauty"
+  | "Sports"
   | "Groceries"
   | "Bags & Luggage"
   | "Beverages"
@@ -13,7 +18,8 @@ export type Category =
   | "Dairy & Cold"
   | "Canned & Packaged"
   | "Kiosk & Airtime"
-  | "Misc";
+  | "Misc"
+  | (string & {});
 
 export type Unit =
   | "pcs"
@@ -206,6 +212,72 @@ export interface Product {
   reorderPoint?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Customer {
+  id: string;
+  businessId: string;
+  customerName: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  creditLimit?: number;
+  amountOutstanding: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Supplier {
+  id: string;
+  businessId: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  contactPerson?: string;
+  suppliedCategories?: string[];
+  balanceOwed?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Expense {
+  id: string;
+  businessId: string;
+  category: string;
+  amount: number;
+  description: string;
+  date: string;
+  recordedBy?: string;
+  paymentMethod?: string;
+  receiptUrl?: string;
+  createdAt?: string;
+}
+
+export interface CashTransaction {
+  id: string;
+  businessId: string;
+  type: "cash_in" | "cash_out" | "drawer_opening" | "drawer_closing";
+  amount: number;
+  reason: string;
+  timestamp: string;
+  recordedBy: string;
+  balanceAfter?: number;
+}
+
+export interface SaleRecord {
+  id: string;
+  businessId: string;
+  cashierUid?: string;
+  totalAmount: number;
+  totalUnits: number;
+  items: SaleItem[];
+  paymentMethod?: string;
+  paymentStatus?: PaymentStatus;
+  customerId?: string;
+  customerName?: string;
+  timestamp: string;
+  notes?: string;
 }
 
 export interface UserProfile {

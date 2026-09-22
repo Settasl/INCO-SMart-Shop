@@ -59,6 +59,10 @@ class SoundEffects {
     this.playCashSale();
   }
 
+  public playCashRegister() {
+    this.playCashSale();
+  }
+
   public playCashSale() {
     if (this.isMuted) return;
     try {

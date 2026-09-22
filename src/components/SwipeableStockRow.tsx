@@ -237,39 +237,39 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
           {/* Item Details */}
           <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="font-black text-base sm:text-lg text-slate-900 dark:text-white leading-tight">
+              <span className="font-bold sm:font-black text-sm sm:text-base text-slate-900 dark:text-white leading-tight">
                 {item.name}
               </span>
 
               {/* Category Tag */}
-              <span className="text-xs sm:text-sm px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-700">
+              <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-700">
                 {item.category}
               </span>
 
               {/* Stock Status Badge */}
               {isOutOfStock ? (
-                <span className="text-xs sm:text-sm px-2.5 py-0.5 rounded-lg font-black bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5">
-                  <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Out of Stock
+                <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-md font-black bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800 flex items-center gap-1">
+                  <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /> Out of Stock
                 </span>
               ) : isLowStock ? (
-                <span className="text-xs sm:text-sm px-2.5 py-0.5 rounded-lg font-black bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Low (≤{item.reorderPoint})
+                <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-md font-black bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Low (≤{item.reorderPoint})
                 </span>
               ) : (
-                <span className="text-xs sm:text-sm px-2.5 py-0.5 rounded-lg font-black bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> In Stock
+                <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-md font-black bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> In Stock
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-x-4 gap-y-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 flex-wrap">
+            <div className="flex items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
               <span>
                 Selling:{" "}
-                <strong className="text-slate-900 dark:text-slate-100 text-sm sm:text-base font-black">
+                <strong className="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-black">
                   {settings.currencySymbol}
                   {item.sellingPrice.toFixed(2)}
                 </strong>{" "}
-                <span className="text-xs text-slate-400 font-semibold">/{item.unit}</span>
+                <span className="text-[11px] text-slate-400 font-semibold">/{item.unit}</span>
               </span>
               <span>
                 Cost:{" "}
@@ -279,13 +279,13 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                 </span>
               </span>
               {item.barcode && (
-                <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-mono text-xs sm:text-sm font-semibold">
-                  <Barcode className="w-4 h-4" /> {item.barcode}
+                <span className="flex items-center gap-1 text-slate-600 dark:text-slate-300 font-mono text-[11px] sm:text-xs font-semibold">
+                  <Barcode className="w-3.5 h-3.5" /> {item.barcode}
                 </span>
               )}
               {item.location && (
-                <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-xs sm:text-sm font-medium">
-                  <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-500" /> {item.location}
+                <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-[11px] sm:text-xs font-medium">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> {item.location}
                 </span>
               )}
             </div>
@@ -293,16 +293,16 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
         </div>
 
         {/* Counter Control Cluster */}
-        <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0 border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 border-t md:border-t-0 pt-2 md:pt-0 border-slate-100 dark:border-slate-800 flex-wrap sm:flex-nowrap">
           {/* Quick Adjust Stepper */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-300 dark:border-slate-700 gap-1.5">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-700 gap-1">
             <button
               onClick={() => {
                 sounds.playStockRemove();
                 sounds.triggerHaptic(15);
                 onQuantityWithFlash(item.id, -5);
               }}
-              className="px-2.5 py-1.5 text-xs sm:text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              className="hidden sm:inline-flex px-2 py-1 text-xs font-extrabold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
               title="Subtract 5"
             >
               -5
@@ -313,14 +313,14 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                 sounds.triggerHaptic(10);
                 onQuantityWithFlash(item.id, -1);
               }}
-              className="p-2 sm:p-2.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl shadow-2xs font-black transition-colors cursor-pointer flex items-center justify-center min-w-[38px] min-h-[38px]"
+              className="p-1.5 sm:p-2 bg-white dark:bg-slate-700 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg shadow-2xs font-black transition-colors cursor-pointer flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[36px] sm:min-h-[36px]"
               title="Subtract 1"
             >
-              <Minus className="w-4.5 h-4.5 stroke-[2.5]" />
+              <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
             </button>
 
             {/* Direct Numeric Input with Flash Animation */}
-            <div className="mx-1 text-center relative">
+            <div className="mx-0.5 text-center relative">
               <input
                 type="number"
                 min="0"
@@ -333,7 +333,7 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                     isNaN(val) ? 0 : Math.max(0, val)
                   );
                 }}
-                className={`w-16 sm:w-20 text-center font-black text-lg sm:text-xl py-1.5 rounded-xl border transition-all duration-300 ${
+                className={`w-13 sm:w-16 text-center font-black text-sm sm:text-base py-1 rounded-lg border transition-all duration-300 ${
                   currentFlash?.type === "up"
                     ? "bg-emerald-200 text-emerald-950 border-emerald-500 ring-2 ring-emerald-500 scale-105 shadow-xs"
                     : currentFlash?.type === "down"
@@ -347,7 +347,7 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                     : "bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
                 }`}
               />
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-bold lowercase mt-0.5">
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold lowercase mt-0.5">
                 {item.unit}
               </div>
             </div>
@@ -358,10 +358,10 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                 sounds.triggerHaptic(10);
                 onQuantityWithFlash(item.id, 1);
               }}
-              className="p-2 sm:p-2.5 bg-yellow-400 text-slate-950 hover:bg-yellow-300 rounded-xl shadow-2xs font-black transition-colors cursor-pointer flex items-center justify-center min-w-[38px] min-h-[38px]"
+              className="p-1.5 sm:p-2 bg-yellow-400 text-slate-950 hover:bg-yellow-300 rounded-lg shadow-2xs font-black transition-colors cursor-pointer flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[36px] sm:min-h-[36px]"
               title="Add 1"
             >
-              <Plus className="w-4.5 h-4.5 stroke-[3]" />
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
             </button>
             <button
               onClick={() => {
@@ -369,7 +369,7 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                 sounds.triggerHaptic(15);
                 onQuantityWithFlash(item.id, 5);
               }}
-              className="px-2.5 py-1.5 text-xs sm:text-sm font-extrabold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              className="hidden sm:inline-flex px-2 py-1 text-xs font-extrabold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
               title="Add 5"
             >
               +5
@@ -380,7 +380,7 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                 sounds.triggerHaptic(20);
                 onQuantityWithFlash(item.id, 24);
               }}
-              className="px-3 py-1.5 text-xs sm:text-sm font-black bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl transition-colors cursor-pointer"
+              className="hidden md:inline-flex px-2.5 py-1 text-xs font-black bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-colors cursor-pointer"
               title="Add Crate/Carton (24)"
             >
               +24
@@ -388,7 +388,7 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
           </div>
 
           {/* Quick Actions (Sell / Barcode / Edit / Delete) */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {/* 1-Tap Quick Sell Button */}
             {item.quantity > 0 && onQuickSellItem && (
               <button
@@ -398,10 +398,10 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                   sounds.triggerHaptic(20);
                   onQuickSellItem(item);
                 }}
-                className="px-3.5 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-2xl shadow-xs transition-transform active:scale-95 flex items-center gap-2 min-h-[44px] cursor-pointer neon-glow-amber"
+                className="px-2.5 sm:px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-transform active:scale-95 flex items-center gap-1.5 min-h-[34px] sm:min-h-[36px] cursor-pointer"
                 title={`Quick Sell 1 ${item.unit} of "${item.name}" (${settings.currencySymbol}${item.sellingPrice.toFixed(2)})`}
               >
-                <Zap className="w-4.5 h-4.5 fill-slate-950" />
+                <Zap className="w-3.5 h-3.5 fill-slate-950" />
                 <span>Sell</span>
               </button>
             )}
@@ -412,10 +412,10 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                 sounds.triggerHaptic(10);
                 onScanItemBarcode(item);
               }}
-              className="p-2.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-1.5 sm:p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center"
               title="Scan/Assign Barcode"
             >
-              <Barcode className="w-5 h-5" />
+              <Barcode className="w-4 h-4" />
             </button>
             <button
               onClick={() => {
@@ -423,10 +423,10 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                 sounds.triggerHaptic(10);
                 onEditItem(item);
               }}
-              className="p-2.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-1.5 sm:p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center"
               title="Edit Item Details"
             >
-              <Edit2 className="w-5 h-5" />
+              <Edit2 className="w-4 h-4" />
             </button>
             <button
               onClick={() => {
@@ -436,10 +436,10 @@ export const SwipeableStockRow: React.FC<SwipeableStockRowProps> = ({
                   onDeleteItem(item.id);
                 }
               }}
-              className="p-2.5 text-rose-600 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-2xl transition-colors cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-1.5 sm:p-2 text-rose-600 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center"
               title="Delete Item"
             >
-              <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>

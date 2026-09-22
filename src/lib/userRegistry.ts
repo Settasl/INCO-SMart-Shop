@@ -1,4 +1,5 @@
 import { UserProfile, PaymentRequest, VerificationRequest } from "../types";
+import { fetchAllUsersFromFirestore } from "./firebase";
 
 export interface RegisteredAccount {
   id: string;
@@ -35,20 +36,6 @@ export const DEFAULT_ACCOUNTS: RegisteredAccount[] = [
     proExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3650).toISOString(), // 10 years
     avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
     createdAt: "2026-01-01T00:00:00.000Z",
-  },
-  {
-    id: "user-demo-merchant-02",
-    emailOrPhone: "merchant@kiosk.com",
-    passwordHash: "[PROTECTED_BY_FIREBASE]",
-    displayName: "David Kiosk",
-    storeName: "David Provisions & Mini Mart",
-    role: "merchant",
-    isVerified: false,
-    verificationStatus: "none",
-    accountStatus: "active",
-    isPro: false,
-    avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=140&auto=format&fit=crop&q=80",
-    createdAt: "2026-02-15T00:00:00.000Z",
   },
 ];
 
@@ -440,30 +427,94 @@ export async function syncUsersWithServer(): Promise<RegisteredAccount[]> {
 
   isSyncing = true;
   try {
-    const res = await fetch("/api/users/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientUsers: localAccounts }),
+    // 1. Attempt REST sync with server or Netlify Function
+    let serverAccounts: RegisteredAccount[] = [];
+    try {
+      const res = await fetch("/api/users/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientUsers: localAccounts }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.users) && data.users.length > 0) {
+          serverAccounts = data.users;
+        }
+      }
+    } catch (restErr) {
+      // Deferred
+    }
+
+    // 2. Fetch directly from cloud Firestore (authoritative cross-device registry)
+    let firestoreAccounts: RegisteredAccount[] = [];
+    try {
+      const fsUsers = await fetchAllUsersFromFirestore();
+      if (Array.isArray(fsUsers) && fsUsers.length > 0) {
+        firestoreAccounts = fsUsers
+          .filter((f) => f && (f.email || f.uid))
+          .map((f) => {
+            const email = (f.email || f.emailOrPhone || "").toLowerCase();
+            const isSuperAdmin = email === SUPER_ADMIN_EMAIL.toLowerCase();
+            return {
+              id: f.uid || f.id || `user-${Date.now()}`,
+              emailOrPhone: email || "unknown",
+              passwordHash: "[PROTECTED_BY_FIREBASE]",
+              displayName: f.displayName || (email ? email.split("@")[0] : "Merchant"),
+              storeName: f.storeName || "My Store",
+              role: isSuperAdmin ? "admin" : (f.role || "merchant"),
+              isVerified: f.isVerified ?? true,
+              verificationStatus: isSuperAdmin ? "approved" : (f.verificationStatus || "approved"),
+              accountStatus: f.accountStatus || "active",
+              isPro: isSuperAdmin || f.isPro || false,
+              avatarUrl:
+                f.photoURL ||
+                f.avatarUrl ||
+                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=140&auto=format&fit=crop&q=80",
+              createdAt: f.createdAt || new Date().toISOString(),
+            } as RegisteredAccount;
+          });
+      }
+    } catch (fsErr) {
+      // Deferred
+    }
+
+    // 3. Unify all sources (local + server + firestore) into a single master account list
+    const accountMap = new Map<string, RegisteredAccount>();
+
+    // Seed with local accounts
+    localAccounts.forEach((acc) => {
+      if (acc.emailOrPhone) accountMap.set(acc.emailOrPhone.toLowerCase(), acc);
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.users) && data.users.length > 0) {
-        // Ensure super admin is preserved
-        const hasAdmin = data.users.some(
-          (u: RegisteredAccount) => u.emailOrPhone?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
-        );
-        if (!hasAdmin) {
-          data.users.unshift(DEFAULT_ACCOUNTS[0]);
-        }
-
-        saveRegisteredAccounts(data.users);
-        return data.users;
+    // Merge server accounts
+    serverAccounts.forEach((acc) => {
+      if (acc.emailOrPhone) {
+        const key = acc.emailOrPhone.toLowerCase();
+        const existing = accountMap.get(key);
+        accountMap.set(key, existing ? { ...existing, ...acc } : acc);
       }
+    });
+
+    // Merge Firestore accounts
+    firestoreAccounts.forEach((acc) => {
+      if (acc.emailOrPhone) {
+        const key = acc.emailOrPhone.toLowerCase();
+        const existing = accountMap.get(key);
+        accountMap.set(key, existing ? { ...existing, ...acc } : acc);
+      }
+    });
+
+    // Ensure Super Admin is always present
+    if (!accountMap.has(SUPER_ADMIN_EMAIL.toLowerCase())) {
+      accountMap.set(SUPER_ADMIN_EMAIL.toLowerCase(), DEFAULT_ACCOUNTS[0]);
     }
+
+    const unified = Array.from(accountMap.values());
+    saveRegisteredAccounts(unified);
+    return unified;
   } catch (err) {
-    // Network error or server offline: fall back to local store
-    console.warn("[SyncEngine] Offline or server unreachable. Operating from local cache.", err);
+    console.warn("[SyncEngine] Sync deferred. Operating from local cache.", err);
   } finally {
     isSyncing = false;
   }

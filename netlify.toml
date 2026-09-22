@@ -1,7 +1,40 @@
 [build]
   publish = "dist"
   command = "npm run build"
+  functions = "netlify/functions"
 
+# Netlify Serverless Functions API routes
+[[redirects]]
+  from = "/api/ai/parse-text"
+  to = "/.netlify/functions/ai-parse-text"
+  status = 200
+
+[[redirects]]
+  from = "/api/ai/voice-dialogue"
+  to = "/.netlify/functions/ai-voice-dialogue"
+  status = 200
+
+[[redirects]]
+  from = "/api/ai/photo-audit"
+  to = "/.netlify/functions/ai-photo-audit"
+  status = 200
+
+[[redirects]]
+  from = "/api/ai/insights"
+  to = "/.netlify/functions/ai-insights"
+  status = 200
+
+[[redirects]]
+  from = "/api/send-email-alert"
+  to = "/.netlify/functions/send-email-alert"
+  status = 200
+
+[[redirects]]
+  from = "/api/health"
+  to = "/.netlify/functions/health"
+  status = 200
+
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"

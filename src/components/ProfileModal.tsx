@@ -36,7 +36,7 @@ import { UserProfile, PaymentRequest, VerificationRequest } from "../types";
 import { BrandLogo } from "./BrandLogo";
 import { sounds } from "../lib/sound";
 import { encryptHealthData, decryptHealthData, HealthVaultData } from "../lib/crypto";
-import { updateAccountPassword } from "../lib/userRegistry";
+import { useAuth } from "../context/AuthContext";
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -74,6 +74,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onLogout,
   onShowToast,
 }) => {
+  const { changePassword, deleteAccount } = useAuth();
   const [activeTab, setActiveTab] = useState<"profile" | "health_vault" | "verification" | "subscription">("profile");
 
   // Profile Edit Form State
@@ -96,18 +97,23 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   // Account Deletion State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Change Password in Profile State
   const [showChangePassSection, setShowChangePassSection] = useState(false);
+  const [profileCurrentPassword, setProfileCurrentPassword] = useState("");
   const [profileNewPassword, setProfileNewPassword] = useState("");
   const [profileConfirmPassword, setProfileConfirmPassword] = useState("");
   const [profileShowPass, setProfileShowPass] = useState(false);
   const [passUpdateStatus, setPassUpdateStatus] = useState<string | null>(null);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
-  const handleProfileChangePassword = (e: React.FormEvent) => {
+  const handleProfileChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (profileNewPassword.length < 4) {
-      setPassUpdateStatus("Password must be at least 4 characters.");
+    if (profileNewPassword.length < 6) {
+      setPassUpdateStatus("Password must be at least 6 characters.");
       return;
     }
     if (profileNewPassword !== profileConfirmPassword) {
@@ -115,19 +121,40 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       return;
     }
 
-    const ok = updateAccountPassword(userProfile.identifier, profileNewPassword.trim());
-    if (ok) {
+    setIsUpdatingPassword(true);
+    setPassUpdateStatus(null);
+    try {
+      await changePassword(profileNewPassword.trim(), profileCurrentPassword.trim() || undefined);
       sounds.playSuccess();
       setPassUpdateStatus("Success: Password successfully updated!");
       onShowToast("Account password changed successfully!", "success");
       setProfileNewPassword("");
       setProfileConfirmPassword("");
+      setProfileCurrentPassword("");
       setTimeout(() => {
         setShowChangePassSection(false);
         setPassUpdateStatus(null);
       }, 2000);
-    } else {
-      setPassUpdateStatus("Error updating password. Please try again.");
+    } catch (err: any) {
+      setPassUpdateStatus(err?.message || "Error updating password. Please try again.");
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount(deletePassword.trim() || undefined);
+      sounds.playSuccess();
+      setShowDeleteModal(false);
+      onShowToast("Your account has been deleted.", "info");
+      onDeleteAccount();
+    } catch (err: any) {
+      setDeleteError(err?.message || "Failed to delete account. Please verify password.");
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -781,51 +808,69 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-2">
                       <div>
                         <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                          New Password
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={profileShowPass ? "text" : "password"}
-                            value={profileNewPassword}
-                            onChange={(e) => setProfileNewPassword(e.target.value)}
-                            placeholder="Enter new password"
-                            required
-                            className="w-full px-3 py-1.5 pr-8 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-hidden focus:border-yellow-400"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setProfileShowPass(!profileShowPass)}
-                            className="absolute right-2 top-2 text-slate-400 hover:text-white"
-                          >
-                            {profileShowPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                          Confirm New Password
+                          Current Password (for verification)
                         </label>
                         <input
-                          type={profileShowPass ? "text" : "password"}
-                          value={profileConfirmPassword}
-                          onChange={(e) => setProfileConfirmPassword(e.target.value)}
-                          placeholder="Confirm new password"
-                          required
+                          type="password"
+                          value={profileCurrentPassword}
+                          onChange={(e) => setProfileCurrentPassword(e.target.value)}
+                          placeholder="Enter current password"
                           className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-hidden focus:border-yellow-400"
                         />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                            New Password (min. 6 chars)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={profileShowPass ? "text" : "password"}
+                              value={profileNewPassword}
+                              onChange={(e) => setProfileNewPassword(e.target.value)}
+                              placeholder="Enter new password"
+                              required
+                              minLength={6}
+                              className="w-full px-3 py-1.5 pr-8 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-hidden focus:border-yellow-400"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setProfileShowPass(!profileShowPass)}
+                              className="absolute right-2 top-2 text-slate-400 hover:text-white"
+                            >
+                              {profileShowPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                            Confirm New Password
+                          </label>
+                          <input
+                            type={profileShowPass ? "text" : "password"}
+                            value={profileConfirmPassword}
+                            onChange={(e) => setProfileConfirmPassword(e.target.value)}
+                            placeholder="Confirm new password"
+                            required
+                            minLength={6}
+                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-hidden focus:border-yellow-400"
+                          />
+                        </div>
                       </div>
                     </div>
 
                     <button
                       type="submit"
-                      className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs rounded-lg cursor-pointer transition-all shadow-xs flex items-center gap-1 neon-glow-amber"
+                      disabled={isUpdatingPassword}
+                      className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs rounded-lg cursor-pointer transition-all shadow-xs flex items-center gap-1 neon-glow-amber disabled:opacity-50"
                     >
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      <span>Save New Password</span>
+                      <span>{isUpdatingPassword ? "Updating..." : "Save New Password"}</span>
                     </button>
                   </form>
                 )}
@@ -1324,17 +1369,39 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </p>
             </div>
 
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                Type <strong className="text-rose-400">DELETE</strong> to confirm:
-              </label>
-              <input
-                type="text"
-                value={deleteConfirmText}
-                onChange={(e) => setDeleteConfirmText(e.target.value)}
-                placeholder="Type DELETE"
-                className="w-full px-3 py-1.5 bg-slate-950 border border-rose-800 rounded-lg text-center text-xs font-mono text-white focus:outline-hidden"
-              />
+            {deleteError && (
+              <div className="p-2 bg-rose-950/80 border border-rose-800 text-rose-300 rounded-lg text-xs flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                  Type <strong className="text-rose-400">DELETE</strong> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="Type DELETE"
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-rose-800 rounded-lg text-center text-xs font-mono text-white focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                  Your Account Password (to verify):
+                </label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-hidden"
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-2 pt-1">
@@ -1343,6 +1410,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 onClick={() => {
                   setShowDeleteModal(false);
                   setDeleteConfirmText("");
+                  setDeletePassword("");
+                  setDeleteError(null);
                 }}
                 className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-xs"
               >
@@ -1350,15 +1419,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </button>
               <button
                 type="button"
-                disabled={deleteConfirmText.trim().toUpperCase() !== "DELETE"}
-                onClick={() => {
-                  sounds.playSuccess();
-                  setShowDeleteModal(false);
-                  onDeleteAccount();
-                }}
-                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                disabled={deleteConfirmText.trim().toUpperCase() !== "DELETE" || isDeletingAccount}
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1"
               >
-                Confirm Delete
+                {isDeletingAccount ? "Deleting..." : "Confirm Delete"}
               </button>
             </div>
           </div>
