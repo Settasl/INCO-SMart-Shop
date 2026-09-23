@@ -56,11 +56,33 @@ service cloud.firestore {
       allow read: if isOwnerOf(userId) || isAdmin();
       allow create: if isOwnerOf(userId) && isValidId(userId)
                     && request.resource.data.uid == request.auth.uid
+                    && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == request.auth.token.email_verified)
                     && (!('role' in request.resource.data) || request.resource.data.role != 'admin' || isAdmin());
       allow update: if (isOwnerOf(userId) || isAdmin())
                     && request.resource.data.uid == resource.data.uid
+                    && (!('isVerified' in request.resource.data) || isAdmin() || request.resource.data.isVerified == request.auth.token.email_verified)
                     && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role || isAdmin());
       allow delete: if isAdmin();
+    }
+
+    match /referralInvites/{inviteId} {
+      allow create: if isSignedIn()
+        && request.resource.data.inviterUid == request.auth.uid
+        && request.resource.data.channel in ['whatsapp', 'copy']
+        && request.resource.data.referralCode is string
+        && request.resource.data.referralCode.size() >= 6
+        && request.resource.data.referralCode.size() <= 64;
+      allow read: if isAdmin() || (isSignedIn() && resource.data.inviterUid == request.auth.uid);
+      allow update, delete: if false;
+    }
+
+    match /adminAuditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.adminUid == request.auth.uid
+        && request.resource.data.action is string
+        && request.resource.data.targetUid is string;
+      allow update, delete: if false;
     }
 
     // --- PLATFORM SUPER ADMINS ---
