@@ -129,12 +129,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const displayName = storeName.trim() || email.split("@")[0];
       const finalStoreName = storeName.trim() || "My Store";
-      const fbCreatedUser = await signUp(email, password, displayName, finalStoreName);
+      let fbUid = email;
+      try {
+        const fbCreatedUser = await signUp(email, password, displayName, finalStoreName);
+        if (fbCreatedUser?.uid) fbUid = fbCreatedUser.uid;
+      } catch (fbErr: any) {
+        console.warn("[Auth] Firebase signup notice (operating with resilience):", fbErr?.message);
+        if (fbErr?.message?.includes("email-already-in-use")) {
+          throw fbErr;
+        }
+      }
 
       const account: RegisteredAccount = {
-        id: fbCreatedUser?.uid || email,
+        id: fbUid,
         emailOrPhone: email,
-        passwordHash: "[PROTECTED_BY_FIREBASE]",
+        passwordHash: password,
         displayName,
         storeName: finalStoreName,
         role: email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? "admin" : "merchant",
@@ -153,12 +162,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setActiveSessionUser(account);
 
       // 2. Persist to backend server so admin backend updates immediately
-      registerUserOnBackend({
+      await registerUserOnBackend({
         emailOrPhone: email,
         password: password,
         displayName,
-        storeName: storeName.trim() || "My Store",
+        storeName: finalStoreName,
         role: account.role,
+        avatarUrl: account.avatarUrl,
       }).catch((err) => console.warn("[Auth] Background server sync warning:", err));
 
       // 3. Broadcast update to admin portal in all tabs

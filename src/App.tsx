@@ -312,18 +312,69 @@ export function App() {
     safeStorage.setJSON("inco_verification_requests", verificationRequests);
   }, [verificationRequests]);
 
-  // Admin Users List from Firestore
+  // Admin Users List from Firestore & Backend Server
   const [adminUsersList, setAdminUsersList] = useState<UserProfile[]>([]);
 
   const refreshAdminUsers = useCallback(async () => {
     try {
-      const fsUsers = await fetchAllUsersFromFirestore();
-      if (Array.isArray(fsUsers) && fsUsers.length > 0) {
-        setAdminUsersList(fsUsers);
+      const fsUsers = await fetchAllUsersFromFirestore().catch(() => []);
+      let serverUsers: UserProfile[] = [];
+      try {
+        const res = await fetch("/api/users");
+        if (res.ok) {
+          const d = await res.json();
+          if (Array.isArray(d.users)) {
+            serverUsers = d.users.map((u: any) => ({
+              id: u.id,
+              identifier: u.emailOrPhone,
+              displayName: u.displayName,
+              storeName: u.storeName,
+              role: u.role,
+              isVerified: u.isVerified,
+              verificationStatus: u.verificationStatus,
+              accountStatus: u.accountStatus,
+              avatarUrl: u.avatarUrl,
+              createdAt: u.createdAt,
+              subscription: {
+                plan: u.isPro ? "INCO Pro AI" : "Free Starter",
+                status: u.isPro ? "active" : "free",
+                validUntil: u.proExpiresAt,
+              },
+            }));
+          }
+        }
+      } catch (err) {}
+
+      const localUsers = loadRegisteredAccounts().map(convertAccountToUserProfile);
+
+      // Merge and deduplicate by identifier / email / id
+      const map = new Map<string, UserProfile>();
+      localUsers.forEach((u) => {
+        const key = (u.identifier || u.id || "").toLowerCase();
+        if (key) map.set(key, u);
+      });
+      serverUsers.forEach((u) => {
+        const key = (u.identifier || u.id || "").toLowerCase();
+        if (key) {
+          const existing = map.get(key);
+          map.set(key, existing ? { ...existing, ...u } : u);
+        }
+      });
+      (fsUsers || []).forEach((u: any) => {
+        const key = (u.identifier || u.email || u.id || "").toLowerCase();
+        if (key) {
+          const existing = map.get(key);
+          map.set(key, existing ? { ...existing, ...u } : u);
+        }
+      });
+
+      const merged = Array.from(map.values());
+      if (merged.length > 0) {
+        setAdminUsersList(merged);
         return;
       }
     } catch (e) {
-      console.warn("[Admin] Firestore user fetch error:", e);
+      console.warn("[Admin] User fetch error:", e);
     }
     setAdminUsersList(loadRegisteredAccounts().map(convertAccountToUserProfile));
   }, []);
@@ -332,7 +383,20 @@ export function App() {
   useEffect(() => {
     const unsub = subscribeToAllUsersFromFirestore((liveUsers) => {
       if (Array.isArray(liveUsers) && liveUsers.length > 0) {
-        setAdminUsersList(liveUsers);
+        const localUsers = loadRegisteredAccounts().map(convertAccountToUserProfile);
+        const map = new Map<string, UserProfile>();
+        localUsers.forEach((u) => {
+          const key = (u.identifier || u.id || "").toLowerCase();
+          if (key) map.set(key, u);
+        });
+        liveUsers.forEach((u) => {
+          const key = (u.identifier || u.email || u.id || "").toLowerCase();
+          if (key) {
+            const existing = map.get(key);
+            map.set(key, existing ? { ...existing, ...u } : u);
+          }
+        });
+        setAdminUsersList(Array.from(map.values()));
       }
     });
     return () => unsub();

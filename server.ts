@@ -318,7 +318,16 @@ app.post("/api/users/signup", (req, res) => {
       (u) => u.emailOrPhone.toLowerCase() === cleanId || u.id.toLowerCase() === cleanId
     );
     if (existing) {
-      return res.status(409).json({ error: "An account with this email/phone already exists. Please sign in.", user: existing });
+      existing.displayName = displayName?.trim() || existing.displayName;
+      existing.storeName = storeName?.trim() || existing.storeName;
+      if (avatarUrl) existing.avatarUrl = avatarUrl;
+      existing.lastLoginAt = new Date().toISOString();
+      saveDatabase();
+      return res.status(200).json({
+        success: true,
+        user: existing,
+        message: "Account already exists, synchronized profile with backend server.",
+      });
     }
 
     const isDefaultAdmin = cleanId === "settaholdings@gmail.com";

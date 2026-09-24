@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Html5QrcodeScanner, Html5Qrcode } from "html5-qrcode";
-import { Barcode, Volume2, CheckCircle2, AlertCircle, Plus, Search, Camera } from "lucide-react";
+import { Html5Qrcode, Html5QrcodeScannerState } from "html5-qrcode";
+import { Barcode, Volume2, CheckCircle2, AlertCircle, Plus, Search, Camera, X } from "lucide-react";
 import { InventoryItem, StoreSettings } from "../types";
 
 interface BarcodeScannerModalProps {
@@ -101,50 +101,110 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     }
   };
 
+  // Safe stop helper function to guarantee html5-qrcode never throws unhandled errors
+  const safeStopScanner = async (scanner: Html5Qrcode | null) => {
+    if (!scanner) return;
+    try {
+      let isScanning = false;
+      try {
+        if (typeof scanner.getState === "function") {
+          const state = scanner.getState();
+          isScanning =
+            state === Html5QrcodeScannerState.SCANNING ||
+            state === Html5QrcodeScannerState.PAUSED;
+        } else if (scanner.isScanning) {
+          isScanning = true;
+        }
+      } catch (_) {
+        isScanning = false;
+      }
+
+      if (isScanning) {
+        await scanner.stop().catch(() => {});
+      }
+    } catch (_) {
+      // Catch synchronous "Cannot stop, scanner is not running or paused."
+    }
+
+    try {
+      scanner.clear();
+    } catch (_) {
+      // Clear failure ignored
+    }
+  };
+
   // Start Camera Scanner
   useEffect(() => {
     if (!isOpen) return;
 
+    let isMounted = true;
     const scannerId = "html5qrcode-cam-reader";
 
-    // Wait for DOM element
-    const timer = setTimeout(() => {
+    const startScanner = async () => {
+      // Wait for modal mount and animation
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (!isMounted) return;
+
+      const element = document.getElementById(scannerId);
+      if (!element || !isMounted) return;
+
       try {
         const html5Qrcode = new Html5Qrcode(scannerId);
         scannerRef.current = html5Qrcode;
 
-        html5Qrcode
-          .start(
-            { facingMode: "environment" },
-            {
-              fps: 10,
-              qrbox: { width: 250, height: 180 },
-            },
-            (decodedText) => {
+        await html5Qrcode.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 180 },
+          },
+          (decodedText) => {
+            if (isMounted) {
               handleBarcodeFound(decodedText);
-            },
-            () => {
-              // Ignore frame read errors
             }
-          )
-          .catch((err) => {
-            console.warn("Camera start failed:", err);
-            setCameraError("Camera permission or video feed unavailable. You can use manual USB scanner or code entry below.");
-          });
-      } catch (e: any) {
-        setCameraError("Scanner initialization failed.");
+          },
+          () => {
+            // Ignore frame read failures
+          }
+        );
+
+        // If closed while starting up
+        if (!isMounted) {
+          await safeStopScanner(html5Qrcode);
+          if (scannerRef.current === html5Qrcode) {
+            scannerRef.current = null;
+          }
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.warn("Camera start failed:", err);
+          setCameraError(
+            "Camera permission or video feed unavailable. You can use manual USB scanner or code entry below."
+          );
+        }
       }
-    }, 300);
+    };
+
+    startScanner();
 
     return () => {
-      clearTimeout(timer);
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {}).then(() => {
-          scannerRef.current?.clear();
-        });
+      isMounted = false;
+      const scanner = scannerRef.current;
+      scannerRef.current = null;
+      if (scanner) {
+        safeStopScanner(scanner);
       }
     };
   }, [isOpen]);
+
+  const handleClose = () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner) {
+      safeStopScanner(scanner);
+    }
+    onClose();
+  };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,7 +217,14 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          handleClose();
+        }
+      }}
+    >
       <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
@@ -174,8 +241,12 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold p-1">
-            ✕
+          <button
+            type="button"
+            onClick={handleClose}
+            className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -185,7 +256,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             <span className="text-slate-700">Rapid Scan Mode (+1 Stock on Scan)</span>
             <button
               onClick={() => setIsRapidMode(!isRapidMode)}
-              className={`px-3 py-1 rounded-lg font-bold transition-colors ${
+              className={`px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
                 isRapidMode ? "bg-emerald-600 text-white" : "bg-slate-300 text-slate-700"
               }`}
             >
@@ -236,22 +307,24 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             </div>
             <div className="flex items-center gap-2 pt-1">
               <button
+                type="button"
                 onClick={() => {
                   onUpdateQuantity(scannedItem.id, 1, "Barcode scan (+1)");
                   playBeep();
                   setScannedItem({ ...scannedItem, quantity: scannedItem.quantity + 1 });
                 }}
-                className="flex-1 py-1.5 bg-yellow-400 text-slate-950 font-bold text-xs rounded-lg hover:bg-yellow-300"
+                className="flex-1 py-1.5 bg-yellow-400 text-slate-950 font-bold text-xs rounded-lg hover:bg-yellow-300 cursor-pointer"
               >
                 +1 Stock
               </button>
               <button
+                type="button"
                 onClick={() => {
                   onUpdateQuantity(scannedItem.id, 5, "Barcode scan (+5)");
                   playBeep();
                   setScannedItem({ ...scannedItem, quantity: scannedItem.quantity + 5 });
                 }}
-                className="px-3 py-1.5 bg-slate-900 text-white font-bold text-xs rounded-lg"
+                className="px-3 py-1.5 bg-slate-900 text-white font-bold text-xs rounded-lg cursor-pointer hover:bg-slate-800"
               >
                 +5
               </button>
@@ -274,7 +347,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             />
             <button
               type="submit"
-              className="px-4 py-2 bg-slate-900 text-white font-bold text-xs rounded-lg hover:bg-slate-800"
+              className="px-4 py-2 bg-slate-900 text-white font-bold text-xs rounded-lg hover:bg-slate-800 cursor-pointer"
             >
               Lookup
             </button>
@@ -283,8 +356,9 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
         <div className="mt-4 text-center">
           <button
-            onClick={onClose}
-            className="w-full py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-lg hover:bg-slate-200"
+            type="button"
+            onClick={handleClose}
+            className="w-full py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-lg hover:bg-slate-200 cursor-pointer"
           >
             Close Scanner
           </button>

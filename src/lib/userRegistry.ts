@@ -554,37 +554,38 @@ export async function registerUserOnBackend(userData: {
   displayName?: string;
   storeName?: string;
   role?: "admin" | "merchant" | "manager" | "cashier";
+  avatarUrl?: string;
 }): Promise<{ success: boolean; user?: RegisteredAccount; error?: string }> {
   const cleanId = userData.emailOrPhone.trim().toLowerCase();
-
-  // 1. Check local cache first
   const localAccounts = loadRegisteredAccounts();
-  const existingLocal = localAccounts.find(
-    (u) => u.emailOrPhone.toLowerCase() === cleanId
-  );
-  if (existingLocal) {
-    return { success: false, error: "An account with this email/phone already exists. Please sign in." };
-  }
 
-  // 2. Attempt registration on backend server
+  // 1. Attempt registration / sync on backend server
   try {
     const res = await fetch("/api/users/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(userData),
+      body: JSON.stringify({
+        emailOrPhone: cleanId,
+        password: userData.password,
+        displayName: userData.displayName,
+        storeName: userData.storeName,
+        role: userData.role,
+        avatarUrl: userData.avatarUrl,
+      }),
     });
 
     if (res.ok) {
       const data = await res.json();
       if (data.user) {
-        const updated = [data.user, ...localAccounts.filter((a) => a.id !== data.user.id)];
+        const updated = [data.user, ...localAccounts.filter((a) => a.emailOrPhone.toLowerCase() !== cleanId && a.id !== data.user.id)];
         saveRegisteredAccounts(updated);
         setActiveSessionUser(data.user);
+        broadcastUsersChange();
         return { success: true, user: data.user };
       }
     } else {
       const errData = await res.json().catch(() => ({}));
-      return { success: false, error: errData.error || "Failed to register account." };
+      console.warn("[RegisterBackend] Backend notice:", errData.error);
     }
   } catch (netErr) {
     console.warn("[SyncEngine] Backend unreachable during signup, creating local offline account.", netErr);

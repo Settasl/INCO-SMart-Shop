@@ -955,6 +955,137 @@ Use my exclusive Merchant Code: *${referralCode}* to claim 1 Month FREE Pro AI f
               </div>
             </div>
 
+            {/* THREE QUICK ACTION CARDS ("INCO Pro AI", "KYC Verification", "Invite & Earn") */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setActiveTab("subscription");
+                }}
+                className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-yellow-400/50 text-left transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <Sparkles className="w-4 h-4 text-yellow-400 group-hover:rotate-12 transition-transform" />
+                  <span className="text-[8px] font-black uppercase px-1 rounded bg-yellow-400/20 text-yellow-300">
+                    {userProfile.subscription?.status === "active" ? "PRO" : "UPGRADE"}
+                  </span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-black text-white group-hover:text-yellow-400">
+                    INCO Pro AI
+                  </div>
+                  <div className="text-[9px] text-slate-400 truncate">Smart AI Tools</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setActiveTab("verification");
+                }}
+                className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 text-left transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-[8px] font-black uppercase px-1 rounded bg-emerald-500/20 text-emerald-300">
+                    {userProfile.isVerified ? "VERIFIED" : "VERIFY"}
+                  </span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-black text-white group-hover:text-emerald-400">
+                    Verification
+                  </div>
+                  <div className="text-[9px] text-slate-400 truncate">Merchant ID Badge</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setActiveTab("referrals");
+                }}
+                className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-yellow-400/50 text-left transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <Gift className="w-4 h-4 text-yellow-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-[8px] font-black uppercase px-1 rounded bg-yellow-400/20 text-yellow-300">
+                    {referralCount}
+                  </span>
+                </div>
+                <div>
+                  <div className="text-[11px] font-black text-white group-hover:text-yellow-400">
+                    Invite & Earn
+                  </div>
+                  <div className="text-[9px] text-slate-400 truncate">Free Pro Months</div>
+                </div>
+              </button>
+            </div>
+
+            {/* INVITE REFERRAL SHARE LINK OR BUTTON PLACED UNDER USERS PROFILE */}
+            <div className="p-3.5 bg-linear-to-r from-slate-950 via-slate-900 to-slate-950 rounded-xl border border-yellow-400/40 space-y-2.5 shadow-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-yellow-400 text-slate-950">
+                    <Gift className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                      <span>Invite Merchants, Earn Free Months</span>
+                      <span className="text-[8px] px-1.5 py-0.2 rounded-full bg-yellow-400 text-slate-950 uppercase font-black">
+                        PRO REWARD
+                      </span>
+                    </h4>
+                    <p className="text-[10px] text-slate-300">
+                      Share your referral code to unlock 1 Month Free INCO Pro AI for each invited merchant.
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-black text-yellow-400">{referralCount} Invited</span>
+                </div>
+              </div>
+
+              {/* Referral Code & Share Link Controls */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="flex items-center justify-between bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-750 flex-1">
+                  <span className="text-[10px] text-slate-400">Code:</span>
+                  <span className="font-mono font-black text-yellow-400 text-xs tracking-wider">
+                    {referralCode}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyReferralCode}
+                    className="p-1 text-slate-400 hover:text-white transition-colors"
+                    title="Copy Code"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleCopyReferralLink}
+                    className="px-2.5 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 text-[10px] font-black rounded-lg cursor-pointer transition-colors shadow-xs active:scale-95 flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3 stroke-[2.5]" />
+                    <span>Copy Link</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShareViaWhatsApp}
+                    className="px-2.5 py-1.5 bg-[#25D366] hover:bg-[#20ba59] text-white text-[10px] font-black rounded-lg cursor-pointer transition-colors shadow-xs active:scale-95 flex items-center gap-1"
+                  >
+                    <MessageCircle className="w-3 h-3" />
+                    <span>WhatsApp</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Business Logo & Storefront Branding Section */}
             <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
               <input
