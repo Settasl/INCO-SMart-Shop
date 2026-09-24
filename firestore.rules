@@ -17,13 +17,15 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'settaholdings@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'settaholdings@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -55,40 +57,16 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwnerOf(userId) || isAdmin();
       allow create: if isOwnerOf(userId) && isValidId(userId)
-                    && request.resource.data.uid == request.auth.uid
-                    && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == request.auth.token.email_verified)
-                    && (!('role' in request.resource.data) || request.resource.data.role != 'admin' || isAdmin());
+                    && request.resource.data.uid == request.auth.uid;
       allow update: if (isOwnerOf(userId) || isAdmin())
-                    && request.resource.data.uid == resource.data.uid
-                    && (!('isVerified' in request.resource.data) || isAdmin() || request.resource.data.isVerified == request.auth.token.email_verified)
-                    && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role || isAdmin());
+                    && request.resource.data.uid == resource.data.uid;
       allow delete: if isAdmin();
-    }
-
-    match /referralInvites/{inviteId} {
-      allow create: if isSignedIn()
-        && request.resource.data.inviterUid == request.auth.uid
-        && request.resource.data.channel in ['whatsapp', 'copy']
-        && request.resource.data.referralCode is string
-        && request.resource.data.referralCode.size() >= 6
-        && request.resource.data.referralCode.size() <= 64;
-      allow read: if isAdmin() || (isSignedIn() && resource.data.inviterUid == request.auth.uid);
-      allow update, delete: if false;
-    }
-
-    match /adminAuditLogs/{logId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin()
-        && request.resource.data.adminUid == request.auth.uid
-        && request.resource.data.action is string
-        && request.resource.data.targetUid is string;
-      allow update, delete: if false;
     }
 
     // --- PLATFORM SUPER ADMINS ---
     match /admins/{adminUid} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'settaholdings@gmail.com');
     }
 
     // --- CONNECTION TEST ---

@@ -125,6 +125,8 @@ export interface StoreSettings {
   alertEmail?: string;
   autoEmailAlerts?: boolean;
   darkMode?: boolean;
+  storeLogo?: string;
+  businessLogo?: string;
 }
 
 export interface ParsedAIAction {
@@ -286,6 +288,8 @@ export interface UserProfile {
   identifier: string; // phone or email
   displayName: string;
   avatarUrl: string;
+  businessLogo?: string;
+  logoUrl?: string;
   activeBusinessId?: string;
   role: "admin" | "owner" | "manager" | "cashier" | "user" | BusinessRole;
   isVerified: boolean;
@@ -315,6 +319,10 @@ export interface UserProfile {
     reviewedAt?: string;
     adminNotes?: string;
   };
+  referralCode?: string;
+  referralCount?: number;
+  referralRewardsUnlocked?: string[];
+  referralRewardsPending?: boolean;
   subscription: {
     plan: "Free Starter" | "INCO Pro Smartshop" | "INCO Pro AI" | "Enterprise Cloud" | "Lifetime Kiosk";
     status: "free" | "pending_approval" | "active" | "expired";

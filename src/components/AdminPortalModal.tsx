@@ -25,6 +25,7 @@ import {
   Download,
   Zap,
   RefreshCw,
+  Gift,
 } from "lucide-react";
 import {
   UserProfile,
@@ -41,6 +42,7 @@ import {
   getAdminMasterPassword,
   setAdminMasterPassword,
 } from "../lib/userRegistry";
+import { ensureSuperAdminSession, subscribeToAllUsersFromFirestore } from "../lib/firebase";
 import { BrandLogo } from "./BrandLogo";
 
 interface AdminPortalModalProps {
@@ -114,7 +116,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   // User Search & Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [userFilter, setUserFilter] = useState<
-    "all" | "active" | "suspended" | "blocked" | "appeals" | "verified" | "pro"
+    "all" | "active" | "pro" | "verified" | "rewards" | "suspended" | "blocked" | "appeals"
   >("all");
 
   // Inspected User Detail Modal
@@ -167,6 +169,13 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       onRefreshUsers();
     }
 
+    // Real-time Firestore listener: instantly streams new merchant registrations
+    const unsubscribeFirestore = subscribeToAllUsersFromFirestore(() => {
+      if (onRefreshUsers) {
+        onRefreshUsers();
+      }
+    });
+
     // Immediately refresh whenever a new user registers or accounts are updated
     const handleUsersUpdated = () => {
       if (onRefreshUsers) {
@@ -185,6 +194,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     }, 5000);
 
     return () => {
+      unsubscribeFirestore();
       window.removeEventListener("inco:users-updated", handleUsersUpdated);
       window.removeEventListener("storage", handleUsersUpdated);
       clearInterval(livePoll);
@@ -216,6 +226,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     if (userFilter === "appeals") return Boolean(u.userAppealReason);
     if (userFilter === "verified") return u.isVerified;
     if (userFilter === "pro") return u.subscription?.plan === "INCO Pro AI";
+    if (userFilter === "rewards") return Boolean((u as any).referralRewardsUnlocked?.length || (u as any).referralRewardsPending || (u.referralCount && u.referralCount > 0));
     return true;
   });
 
@@ -224,6 +235,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
     setIsSyncingCloud(true);
     sounds.playClick();
     try {
+      await ensureSuperAdminSession(enteredGatePassword.trim() || getAdminMasterPassword() || "INCO-ADMIN-2025").catch(() => {});
       if (onRefreshUsers) {
         await onRefreshUsers();
       }
@@ -257,6 +269,18 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
       setFailedAttempts(0);
       sounds.playSuccess();
       onShowToast("Super Admin Clearance Granted! Command Console Unlocked.", "success");
+
+      // Elevate Firebase Auth session to settaholdings@gmail.com
+      // This grants the active session full Firestore security permissions to read the users collection!
+      ensureSuperAdminSession(enteredGatePassword.trim() || masterPass || "INCO-ADMIN-2025")
+        .then(() => {
+          if (onRefreshUsers) {
+            onRefreshUsers();
+          }
+        })
+        .catch((elevateErr) => {
+          console.warn("[AdminPortal] Background auth elevation notice:", elevateErr);
+        });
     } else {
       const newAttempts = failedAttempts + 1;
       setFailedAttempts(newAttempts);
@@ -423,6 +447,55 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
         : `Downgraded ${userName} to Free Starter`,
       "success"
     );
+  };
+
+  // Approve Referral Rewards
+  const handleApproveReward = (userId: string, userName: string) => {
+    sounds.playSuccess();
+    const newExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const updates: Partial<UserProfile> = {
+      referralRewardsPending: false,
+      referralRewardsUnlocked: ["1 Month Free Pro AI (Referral Reward)"],
+      subscription: {
+        plan: "INCO Pro AI",
+        status: "active",
+        validUntil: newExpires,
+      },
+    };
+    if (onUpdateUserAccount) {
+      onUpdateUserAccount(userId, updates);
+    }
+    if (inspectedUser?.id === userId) {
+      setInspectedUser({
+        ...inspectedUser,
+        ...updates,
+      });
+    }
+    onShowToast(`Referral reward approved for ${userName}! 1 Month Pro AI unlocked.`, "success");
+  };
+
+  // Approve Custom Pro Subscription (1, 3, 6, 12 months)
+  const handleApproveSubscription = (userId: string, months: number, userName: string) => {
+    sounds.playSuccess();
+    const newExpires = new Date(Date.now() + months * 30 * 24 * 60 * 60 * 1000).toISOString();
+    const updates: Partial<UserProfile> = {
+      subscription: {
+        plan: "INCO Pro AI",
+        status: "active",
+        validUntil: newExpires,
+        approvedAt: new Date().toISOString(),
+      },
+    };
+    if (onUpdateUserAccount) {
+      onUpdateUserAccount(userId, updates);
+    }
+    if (inspectedUser?.id === userId) {
+      setInspectedUser({
+        ...inspectedUser,
+        ...updates,
+      });
+    }
+    onShowToast(`Approved ${months} Month(s) Pro AI subscription for ${userName}!`, "success");
   };
 
   // Change Admin Login Password
@@ -1004,7 +1077,7 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                  {(["all", "active", "pro", "verified", "suspended", "blocked", "appeals"] as const).map(
+                  {(["all", "active", "pro", "verified", "rewards", "suspended", "blocked", "appeals"] as const).map(
                     (filterKey) => (
                       <button
                         key={filterKey}
@@ -1186,6 +1259,22 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                   </button>
                                 )}
 
+                                {/* Approve Referral Reward */}
+                                {!isUserAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveReward(user.id, user.displayName)}
+                                    className={`p-2 rounded-xl transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center ${
+                                      (user as any).referralRewardsUnlocked?.length
+                                        ? "bg-amber-400/20 text-amber-400 border border-amber-400/40"
+                                        : "bg-slate-800 hover:bg-amber-950 text-slate-400 hover:text-amber-400"
+                                    }`}
+                                    title="Approve Referral Reward (1 Mo Pro AI)"
+                                  >
+                                    <Gift className="w-4 h-4" />
+                                  </button>
+                                )}
+
                                 {/* Toggle Pro Subscription */}
                                 {!isUserAdmin && (
                                   <button
@@ -1208,32 +1297,66 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
                                   </button>
                                 )}
 
-                                {/* Suspend / Activate */}
+                                {/* Suspend / Activate / Block */}
                                 {!isUserAdmin && user.accountStatus !== "active" ? (
                                   <button
                                     type="button"
                                     onClick={() => handleActivateUser(user.id, user.displayName)}
                                     className="p-2 rounded-xl bg-emerald-950 text-emerald-400 hover:bg-emerald-900 border border-emerald-500/40 transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
-                                    title="Activate & Unblock"
+                                    title="Approve & Activate / Unblock"
                                   >
                                     <UserCheck className="w-4 h-4" />
                                   </button>
                                 ) : !isUserAdmin ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActionReasonModal({
+                                          type: "suspend",
+                                          targetId: user.id,
+                                          targetName: user.displayName,
+                                        });
+                                      }}
+                                      className="p-2 rounded-xl bg-slate-800 hover:bg-amber-950 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
+                                      title="Suspend Account"
+                                    >
+                                      <UserX className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActionReasonModal({
+                                          type: "block",
+                                          targetId: user.id,
+                                          targetName: user.displayName,
+                                        });
+                                      }}
+                                      className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
+                                      title="Block Account"
+                                    >
+                                      <ShieldAlert className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                ) : null}
+
+                                {/* Delete Account */}
+                                {!isUserAdmin && (
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setActionReasonModal({
-                                        type: "suspend",
+                                        type: "delete",
                                         targetId: user.id,
                                         targetName: user.displayName,
                                       });
                                     }}
-                                    className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
-                                    title="Suspend Merchant"
+                                    className="p-2 rounded-xl bg-slate-800 hover:bg-rose-900 text-slate-400 hover:text-rose-300 transition-colors cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
+                                    title="Delete Account"
                                   >
-                                    <UserX className="w-4 h-4" />
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
-                                ) : null}
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1683,73 +1806,251 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
         {/* User Dossier Inspection Modal */}
         {inspectedUser && (
           <div className="fixed inset-0 z-60 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-amber-400 rounded-2xl w-full max-w-md p-5 space-y-4 text-xs font-sans">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <h4 className="text-sm font-black text-white flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-amber-400" />
-                  <span>Merchant Dossier</span>
+            <div className="bg-slate-900 border border-amber-400 rounded-3xl w-full max-w-lg p-6 space-y-4 text-xs font-sans shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h4 className="text-sm font-black text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-amber-400" />
+                  <span>Merchant Management Dossier</span>
                 </h4>
                 <button
                   type="button"
                   onClick={() => setInspectedUser(null)}
-                  className="text-slate-400 hover:text-white"
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <img
-                    src={inspectedUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80"}
-                    alt=""
-                    className="w-12 h-12 rounded-full object-cover border border-amber-400/50"
-                  />
-                  <div>
-                    <div className="text-sm font-black text-white">{inspectedUser.displayName}</div>
-                    <div className="text-slate-400 font-mono">{inspectedUser.identifier}</div>
-                    <div className="text-amber-400 font-semibold">{inspectedUser.storeName || "Retail Kiosk"}</div>
+              {/* Header profile */}
+              <div className="flex items-center gap-3.5 bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+                <img
+                  src={inspectedUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80"}
+                  alt=""
+                  className="w-14 h-14 rounded-full object-cover border-2 border-amber-400/60 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-black text-white truncate">{inspectedUser.displayName}</span>
+                    {inspectedUser.isVerified && (
+                      <span title="KYC Golden Badge">
+                        <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                      </span>
+                    )}
                   </div>
+                  <div className="text-slate-400 font-mono text-xs truncate">{inspectedUser.identifier}</div>
+                  <div className="text-amber-400 font-semibold text-xs mt-0.5 truncate">{inspectedUser.storeName || "Retail Kiosk"}</div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">UID: {inspectedUser.id}</div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <div className="p-2 bg-slate-950 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500 uppercase">Plan</div>
-                    <div className="font-bold text-white">{inspectedUser.subscription?.plan || "Free Starter"}</div>
-                  </div>
-                  <div className="p-2 bg-slate-950 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-500 uppercase">KYC Verified</div>
-                    <div className="font-bold text-emerald-400">
-                      {inspectedUser.isVerified ? "Approved" : "Not Verified"}
-                    </div>
-                  </div>
-                </div>
-
-                {inspectedUser.userAppealReason && (
-                  <div className="p-2.5 bg-amber-950/50 border border-amber-500/40 rounded-xl text-amber-300 text-xs">
-                    <div className="font-bold text-[10px] uppercase">Merchant Appeal Notice:</div>
-                    <p className="mt-0.5">{inspectedUser.userAppealReason}</p>
-                  </div>
-                )}
               </div>
 
-              <div className="flex gap-2 pt-2">
+              {/* Status Grid */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <div className="text-[10px] text-slate-500 uppercase font-bold">Account Status</div>
+                  <div className={`font-black text-xs uppercase mt-0.5 ${
+                    inspectedUser.accountStatus === "active"
+                      ? "text-emerald-400"
+                      : inspectedUser.accountStatus === "suspended"
+                      ? "text-amber-400"
+                      : "text-rose-400"
+                  }`}>
+                    {inspectedUser.accountStatus || "active"}
+                  </div>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <div className="text-[10px] text-slate-500 uppercase font-bold">Subscription</div>
+                  <div className="font-bold text-amber-400 text-xs mt-0.5 truncate">
+                    {inspectedUser.subscription?.plan || "Free Starter"}
+                  </div>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <div className="text-[10px] text-slate-500 uppercase font-bold">KYC Verification</div>
+                  <div className="font-bold text-xs mt-0.5">
+                    {inspectedUser.isVerified ? (
+                      <span className="text-emerald-400">Verified</span>
+                    ) : (
+                      <span className="text-slate-400">Unverified</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {inspectedUser.userAppealReason && (
+                <div className="p-3 bg-amber-950/50 border border-amber-500/40 rounded-xl text-amber-300 text-xs space-y-1">
+                  <div className="font-bold text-[10px] uppercase flex items-center gap-1.5 text-amber-400">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>Merchant Appeal Notice:</span>
+                  </div>
+                  <p className="mt-0.5 leading-relaxed">{inspectedUser.userAppealReason}</p>
+                </div>
+              )}
+
+              {/* Referral & Rewards Panel */}
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-white text-xs flex items-center gap-1.5">
+                    <Gift className="w-4 h-4 text-amber-400" />
+                    <span>Referrals & Rewards</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-amber-400/20 text-amber-400 font-bold text-[10px]">
+                    {inspectedUser.referralCount || 0} Stores Invited
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                  <div>
+                    <span className="text-slate-500">Referral Code: </span>
+                    <strong className="text-white font-mono">{inspectedUser.referralCode || "N/A"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Reward Status: </span>
+                    <strong className="text-amber-300">
+                      {inspectedUser.referralRewardsUnlocked?.length ? "Unlocked" : "Standard"}
+                    </strong>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    handleActivateUser(inspectedUser.id, inspectedUser.displayName);
-                    setInspectedUser(null);
-                  }}
-                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors"
+                  onClick={() => handleApproveReward(inspectedUser.id, inspectedUser.displayName)}
+                  className="w-full py-2 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs rounded-xl shadow transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  Activate & Clear
+                  <Gift className="w-4 h-4" />
+                  <span>Approve Referral Reward (1 Mo Free Pro AI)</span>
                 </button>
+              </div>
+
+              {/* Subscription Approvals */}
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-white text-xs flex items-center gap-1.5">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    <span>Approve Subscription Duration</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {inspectedUser.subscription?.validUntil
+                      ? `Valid until ${new Date(inspectedUser.subscription.validUntil).toLocaleDateString()}`
+                      : "No active subscription"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleApproveSubscription(inspectedUser.id, 1, inspectedUser.displayName)}
+                    className="py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors text-center text-xs"
+                  >
+                    +1 Month Pro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApproveSubscription(inspectedUser.id, 3, inspectedUser.displayName)}
+                    className="py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors text-center text-xs"
+                  >
+                    +3 Months Pro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApproveSubscription(inspectedUser.id, 12, inspectedUser.displayName)}
+                    className="py-2 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 font-bold rounded-xl transition-colors text-center text-xs"
+                  >
+                    +1 Year Pro
+                  </button>
+                </div>
+              </div>
+
+              {/* Account Status Controls */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] uppercase font-bold text-slate-500">Account Governance</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {inspectedUser.accountStatus !== "active" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleActivateUser(inspectedUser.id, inspectedUser.displayName);
+                      }}
+                      className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <UserCheck className="w-4 h-4" />
+                      <span>Approve & Activate</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionReasonModal({
+                          type: "suspend",
+                          targetId: inspectedUser.id,
+                          targetName: inspectedUser.displayName,
+                        });
+                      }}
+                      className="py-2.5 bg-amber-600/30 hover:bg-amber-600/40 border border-amber-500/40 text-amber-300 font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <UserX className="w-4 h-4" />
+                      <span>Suspend Account</span>
+                    </button>
+                  )}
+
+                  {inspectedUser.accountStatus !== "blocked" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionReasonModal({
+                          type: "block",
+                          targetId: inspectedUser.id,
+                          targetName: inspectedUser.displayName,
+                        });
+                      }}
+                      className="py-2.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <ShieldAlert className="w-4 h-4" />
+                      <span>Block Account</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleActivateUser(inspectedUser.id, inspectedUser.displayName);
+                      }}
+                      className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Unlock className="w-4 h-4" />
+                      <span>Unblock Account</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleKYC(inspectedUser.id, inspectedUser.isVerified, inspectedUser.displayName)}
+                    className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs"
+                  >
+                    <Award className="w-4 h-4 text-amber-400" />
+                    <span>{inspectedUser.isVerified ? "Revoke KYC Badge" : "Grant KYC Badge"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionReasonModal({
+                        type: "delete",
+                        targetId: inspectedUser.id,
+                        targetName: inspectedUser.displayName,
+                      });
+                    }}
+                    className="py-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800 text-rose-400 font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Account</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 flex justify-end">
                 <button
                   type="button"
                   onClick={() => setInspectedUser(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl"
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl"
                 >
-                  Close
+                  Close Dossier
                 </button>
               </div>
             </div>

@@ -1,28 +1,35 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
+import { UserProfile, StoreSettings } from "../types";
+import { useAuth } from "../context/AuthContext";
+import { sounds } from "../lib/sound";
+import { compressImage, PRESET_AVATARS, PRESET_BUSINESS_LOGOS } from "../lib/imageUtils";
+import { safeStorage } from "../lib/safeStorage";
 import {
-  User,
-  Mail,
-  Phone,
-  Shield,
-  CheckCircle2,
   Camera,
-  Building,
+  Upload,
+  Check,
+  Building2,
+  Sparkles,
   KeyRound,
   Eye,
   EyeOff,
-  Check,
   AlertCircle,
   Trash2,
+  Store,
+  User,
+  Image as ImageIcon,
+  ShieldCheck,
+  Phone,
+  Mail,
+  MapPin,
+  X,
 } from "lucide-react";
-import { UserProfile, StoreSettings } from "../types";
-import { sounds } from "../lib/sound";
-import { useAuth } from "../context/AuthContext";
 
 interface ProfileViewProps {
-  userProfile?: UserProfile | null;
+  userProfile: UserProfile;
   settings: StoreSettings;
-  onUpdateProfile: (updated: Partial<UserProfile>) => void;
-  onShowToast: (msg: string, type?: "success" | "warning" | "info") => void;
+  onUpdateProfile: (updates: Partial<UserProfile>) => void;
+  onShowToast: (msg: string, type?: "success" | "info" | "error") => void;
   onLogout?: () => void;
 }
 
@@ -35,18 +42,57 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 }) => {
   const { changePassword, deleteAccount } = useAuth();
 
-  const [fullName, setFullName] = useState(
-    userProfile?.displayName || "Setta Holdings"
-  );
-  const [email, setEmail] = useState(
-    userProfile?.identifier || "admin@settaholdings.com"
-  );
-  const [phone, setPhone] = useState("+266 1234 5678");
+  // Basic Profile Info
+  const [fullName, setFullName] = useState(userProfile.displayName || "Store Merchant");
+  const [email, setEmail] = useState(userProfile.identifier || "admin@settaholdings.com");
+  const [phone, setPhone] = useState(userProfile.location || "+266 1234 5678");
+  const [storeName, setStoreName] = useState(userProfile.storeName || settings.storeName || "My Store");
+  const [location, setLocation] = useState(userProfile.location || "");
   const [role, setRole] = useState(
-    (userProfile?.identifier || "").toLowerCase() === "settaholdings@gmail.com"
+    (userProfile.identifier || "").toLowerCase() === "settaholdings@gmail.com"
       ? "Super Admin"
       : "Store Administrator"
   );
+
+  // Avatar & Logo State
+  const [avatarUrl, setAvatarUrl] = useState<string>(
+    userProfile.avatarUrl || PRESET_AVATARS[0]
+  );
+  const [businessLogo, setBusinessLogo] = useState<string>(
+    userProfile.businessLogo || userProfile.logoUrl || settings.storeLogo || ""
+  );
+  const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
+  const [isProcessingLogo, setIsProcessingLogo] = useState(false);
+
+  // Avatar Feed History State
+  const [avatarFeed, setAvatarFeed] = useState<string[]>(() => {
+    const stored = safeStorage.getJSON<string[]>("inco_user_avatar_feed", []);
+    const merged = Array.from(
+      new Set([userProfile.avatarUrl, ...stored, ...PRESET_AVATARS])
+    ).filter(Boolean);
+    return merged;
+  });
+
+  // Business Logo Feed History State
+  const [logoFeed, setLogoFeed] = useState<string[]>(() => {
+    const stored = safeStorage.getJSON<string[]>("inco_user_logo_feed", []);
+    const merged = Array.from(
+      new Set([
+        userProfile.businessLogo,
+        userProfile.logoUrl,
+        settings.storeLogo,
+        ...stored,
+        ...PRESET_BUSINESS_LOGOS,
+      ])
+    ).filter(Boolean) as string[];
+    return merged;
+  });
+
+  // File Input Refs for Camera and Custom Upload
+  const avatarCameraInputRef = useRef<HTMLInputElement>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const logoCameraInputRef = useRef<HTMLInputElement>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Password Management State
   const [currentPassword, setCurrentPassword] = useState("");
@@ -54,7 +100,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [passwordStatus, setPasswordStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [passwordStatus, setPasswordStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   // Account Deletion State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -63,24 +112,100 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // --- AVATAR UPLOAD HANDLER (Camera & File) ---
+  const handleAvatarFile = async (file: File) => {
+    setIsProcessingAvatar(true);
+    try {
+      // Compress to lightweight 400x400 JPEG (~30KB)
+      const compressed = await compressImage(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.85,
+        format: "image/jpeg",
+      });
+
+      setAvatarUrl(compressed);
+      onUpdateProfile({ avatarUrl: compressed });
+      sounds.playSuccess();
+      onShowToast("Profile picture updated and saved to feed!", "success");
+
+      // Save to feed
+      setAvatarFeed((prev) => {
+        const next = [compressed, ...prev.filter((p) => p !== compressed)].slice(0, 16);
+        safeStorage.setJSON("inco_user_avatar_feed", next);
+        return next;
+      });
+    } catch (err: any) {
+      console.error("[ProfileView] Avatar upload error:", err);
+      onShowToast("Failed to process image. Please try another photo.", "error");
+    } finally {
+      setIsProcessingAvatar(false);
+    }
+  };
+
+  // --- BUSINESS LOGO UPLOAD HANDLER (Camera & File) ---
+  const handleLogoFile = async (file: File) => {
+    setIsProcessingLogo(true);
+    try {
+      // Compress to lightweight 400x400 JPEG (~30KB)
+      const compressed = await compressImage(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.85,
+        format: "image/jpeg",
+      });
+
+      setBusinessLogo(compressed);
+      onUpdateProfile({ businessLogo: compressed, logoUrl: compressed });
+      sounds.playSuccess();
+      onShowToast("Business & store logo updated successfully!", "success");
+
+      // Save to logo feed
+      setLogoFeed((prev) => {
+        const next = [compressed, ...prev.filter((p) => p !== compressed)].slice(0, 16);
+        safeStorage.setJSON("inco_user_logo_feed", next);
+        return next;
+      });
+    } catch (err: any) {
+      console.error("[ProfileView] Logo upload error:", err);
+      onShowToast("Failed to process logo image. Please try another photo.", "error");
+    } finally {
+      setIsProcessingLogo(false);
+    }
+  };
+
+  // --- SAVE PROFILE DETAILS ---
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playSuccess();
     onUpdateProfile({
-      displayName: fullName,
-      identifier: email,
+      displayName: fullName.trim(),
+      identifier: email.trim(),
+      storeName: storeName.trim(),
+      location: location.trim(),
+      avatarUrl,
+      businessLogo,
+      logoUrl: businessLogo,
+      lastProfileUpdatedAt: new Date().toISOString(),
     });
-    onShowToast("Profile details updated successfully!", "success");
+    onShowToast("Merchant profile & store branding updated!", "success");
   };
 
+  // --- PASSWORD UPDATE ---
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      setPasswordStatus({ type: "error", message: "Password must be at least 6 characters." });
+      setPasswordStatus({
+        type: "error",
+        message: "Password must be at least 6 characters.",
+      });
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordStatus({ type: "error", message: "New passwords do not match." });
+      setPasswordStatus({
+        type: "error",
+        message: "New passwords do not match.",
+      });
       return;
     }
 
@@ -89,7 +214,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     try {
       await changePassword(newPassword.trim(), currentPassword.trim() || undefined);
       sounds.playSuccess();
-      setPasswordStatus({ type: "success", message: "Password changed successfully in Firebase Auth!" });
+      setPasswordStatus({
+        type: "success",
+        message: "Password updated successfully in Firebase Auth!",
+      });
       onShowToast("Account password updated successfully!", "success");
       setCurrentPassword("");
       setNewPassword("");
@@ -104,6 +232,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   };
 
+  // --- ACCOUNT DELETION ---
   const handleDeleteAccountConfirm = async () => {
     setIsDeleting(true);
     setDeleteError(null);
@@ -120,60 +249,415 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }
   };
 
-  const initials = fullName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2) || "SH";
+  const initials =
+    fullName
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "SH";
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-200">
-      <div className="flex items-center justify-between">
+    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-200 pb-16">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Profile</h1>
-          <p className="text-xs text-slate-400">Account Credentials & Store Ownership</p>
+          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+            <User className="w-6 h-6 text-amber-400" />
+            <span>Merchant Profile & Store Branding</span>
+          </h1>
+          <p className="text-xs text-slate-400">
+            Manage your merchant photo, business logo, store credentials, and security
+          </p>
         </div>
-        <span className="text-xs font-bold text-amber-400 bg-amber-400/10 px-3 py-1 rounded-xl border border-amber-400/30">
-          Verified Merchant
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-amber-400 bg-amber-400/10 px-3 py-1 rounded-xl border border-amber-400/30 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-amber-400" />
+            <span>Verified Merchant</span>
+          </span>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="text-xs font-bold text-slate-400 hover:text-white px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors"
+            >
+              Sign Out
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Main Profile Form Card matching design screenshot */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-[#121826] border border-[#1F293D] shadow-xl">
-        <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-          {/* Left: Avatar Column */}
-          <div className="md:col-span-4 flex flex-col items-center text-center space-y-3">
-            <div className="relative group">
-              <div className="w-28 h-28 rounded-full bg-[#182133] border-2 border-amber-400 text-amber-400 font-black text-3xl flex items-center justify-center shadow-lg shadow-amber-400/10">
-                {initials}
-              </div>
-              <div className="absolute inset-0 rounded-full bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
-                <Camera className="w-6 h-6 text-white" />
-              </div>
+      {/* SECTION 1: MERCHANT PHOTO & AVATAR FEED */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[#121826] border border-[#1F293D] shadow-xl space-y-6">
+        <div className="flex items-center justify-between border-b border-[#1A2333] pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-400/10 text-amber-400 border border-amber-400/20">
+              <Camera className="w-5 h-5" />
             </div>
-
             <div>
-              <h3 className="text-base font-bold text-white">{fullName}</h3>
-              <p className="text-xs text-amber-400 font-semibold">{role}</p>
+              <h2 className="text-base font-bold text-white">Merchant Profile Photo</h2>
+              <p className="text-xs text-slate-400">
+                Take a selfie, upload a custom picture, or pick from the avatar feed
+              </p>
+            </div>
+          </div>
+          {isProcessingAvatar && (
+            <span className="text-xs text-amber-400 font-bold animate-pulse">
+              Optimizing Photo...
+            </span>
+          )}
+        </div>
+
+        {/* Hidden File Inputs for Avatar */}
+        <input
+          type="file"
+          ref={avatarFileInputRef}
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleAvatarFile(file);
+          }}
+        />
+        <input
+          type="file"
+          ref={avatarCameraInputRef}
+          accept="image/*"
+          capture="user"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleAvatarFile(file);
+          }}
+        />
+
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          {/* Avatar Preview */}
+          <div className="relative group shrink-0">
+            <div className="w-28 h-28 rounded-full overflow-hidden border-3 border-amber-400 ring-4 ring-amber-400/20 shadow-xl bg-[#0B0F19] flex items-center justify-center">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={fullName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-amber-400 font-black text-3xl">{initials}</span>
+              )}
             </div>
 
-            <div className="w-full pt-4 border-t border-[#1A2333] space-y-2 text-left text-xs text-slate-400">
-              <div className="flex justify-between">
-                <span>Account Status:</span>
-                <span className="text-emerald-400 font-bold">Active</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Store ID:</span>
-                <span className="font-mono text-slate-300">INCO-SETTA-01</span>
-              </div>
+            {/* Quick Hover Overlay */}
+            <div
+              onClick={() => avatarFileInputRef.current?.click()}
+              className="absolute inset-0 rounded-full bg-slate-950/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity cursor-pointer text-[10px] font-bold"
+            >
+              <Camera className="w-6 h-6 text-amber-400 mb-1" />
+              <span>Change Photo</span>
             </div>
           </div>
 
-          {/* Right: Form Inputs Column */}
-          <div className="md:col-span-8 space-y-4">
+          {/* Action Buttons */}
+          <div className="flex-1 text-center sm:text-left space-y-3">
             <div>
-              <label className="text-xs font-bold text-slate-400">Full Name</label>
+              <h3 className="text-lg font-black text-white">{fullName}</h3>
+              <p className="text-xs text-amber-400 font-semibold">{role}</p>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">{email}</p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+              {/* Take Photo with Camera */}
+              <button
+                type="button"
+                onClick={() => avatarCameraInputRef.current?.click()}
+                className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 active:scale-95"
+              >
+                <Camera className="w-4 h-4 text-slate-950" />
+                <span>Take Photo (Camera)</span>
+              </button>
+
+              {/* Upload Custom File */}
+              <button
+                type="button"
+                onClick={() => avatarFileInputRef.current?.click()}
+                className="px-3.5 py-2 bg-[#182133] hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 shadow-md cursor-pointer transition-all flex items-center gap-1.5 active:scale-95"
+              >
+                <Upload className="w-4 h-4 text-amber-400" />
+                <span>Upload Custom Photo</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Supports live camera capture, JPG, PNG, and WebP. Automatically optimized for ultra-fast loading.
+            </p>
+          </div>
+        </div>
+
+        {/* Avatar Feed & Gallery */}
+        <div className="pt-4 border-t border-[#1A2333] space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs uppercase font-bold text-slate-400 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Avatar Feed & Photo Gallery</span>
+            </label>
+            <span className="text-xs text-slate-500">
+              Tap any avatar to switch instantly
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+            {/* Direct Camera launcher tile inside feed */}
+            <button
+              type="button"
+              onClick={() => avatarCameraInputRef.current?.click()}
+              className="w-14 h-14 rounded-2xl border-2 border-dashed border-amber-400/60 hover:border-amber-400 bg-amber-400/10 flex flex-col items-center justify-center text-amber-400 shrink-0 cursor-pointer transition-all hover:scale-105 active:scale-95"
+              title="Take Photo with Camera"
+            >
+              <Camera className="w-5 h-5 mb-0.5" />
+              <span className="text-[9px] font-black">Camera</span>
+            </button>
+
+            {/* Direct Upload tile inside feed */}
+            <button
+              type="button"
+              onClick={() => avatarFileInputRef.current?.click()}
+              className="w-14 h-14 rounded-2xl border-2 border-dashed border-slate-600 hover:border-slate-400 bg-slate-800/40 flex flex-col items-center justify-center text-slate-300 shrink-0 cursor-pointer transition-all hover:scale-105 active:scale-95"
+              title="Upload File"
+            >
+              <Upload className="w-5 h-5 mb-0.5 text-slate-400" />
+              <span className="text-[9px] font-bold">Upload</span>
+            </button>
+
+            {avatarFeed.map((url, index) => {
+              const isSelected = avatarUrl === url;
+              return (
+                <button
+                  key={`${url}-${index}`}
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    setAvatarUrl(url);
+                    onUpdateProfile({ avatarUrl: url });
+                    onShowToast("Profile avatar selected!", "info");
+                  }}
+                  className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shrink-0 transition-all active:scale-95 relative cursor-pointer ${
+                    isSelected
+                      ? "border-amber-400 ring-4 ring-amber-400/40 scale-105 shadow-lg shadow-amber-400/20"
+                      : "border-slate-700 opacity-75 hover:opacity-100 hover:border-slate-500"
+                  }`}
+                  title="Click to apply avatar"
+                >
+                  <img
+                    src={url}
+                    alt={`Avatar ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-amber-400/30 backdrop-blur-[1px] flex items-center justify-center">
+                      <Check className="w-5 h-5 text-slate-950 stroke-[3]" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 2: BUSINESS / STORE LOGO SELECTOR */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[#121826] border border-[#1F293D] shadow-xl space-y-6">
+        <div className="flex items-center justify-between border-b border-[#1A2333] pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-400/10 text-amber-400 border border-amber-400/20">
+              <Store className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Store & Business Logo</h2>
+              <p className="text-xs text-slate-400">
+                Display your shop banner, storefront, or custom business emblem
+              </p>
+            </div>
+          </div>
+          {isProcessingLogo && (
+            <span className="text-xs text-amber-400 font-bold animate-pulse">
+              Optimizing Logo...
+            </span>
+          )}
+        </div>
+
+        {/* Hidden File Inputs for Logo */}
+        <input
+          type="file"
+          ref={logoFileInputRef}
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleLogoFile(file);
+          }}
+        />
+        <input
+          type="file"
+          ref={logoCameraInputRef}
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleLogoFile(file);
+          }}
+        />
+
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          {/* Logo Preview Tile */}
+          <div className="relative group shrink-0">
+            <div className="w-28 h-28 rounded-2xl overflow-hidden border-2 border-amber-400/60 ring-4 ring-amber-400/15 shadow-xl bg-[#0B0F19] flex items-center justify-center p-1">
+              {businessLogo ? (
+                <img
+                  src={businessLogo}
+                  alt="Business Logo"
+                  className="w-full h-full object-cover rounded-xl"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-slate-500">
+                  <Building2 className="w-10 h-10 text-amber-400/60 mb-1" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    No Logo Set
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Hover Overlay */}
+            <div
+              onClick={() => logoFileInputRef.current?.click()}
+              className="absolute inset-0 rounded-2xl bg-slate-950/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity cursor-pointer text-[10px] font-bold"
+            >
+              <Upload className="w-6 h-6 text-amber-400 mb-1" />
+              <span>Change Logo</span>
+            </div>
+          </div>
+
+          {/* Action Buttons for Business Logo */}
+          <div className="flex-1 text-center sm:text-left space-y-3">
+            <div>
+              <h3 className="text-lg font-black text-white">
+                {storeName || "My Store Logo"}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {businessLogo
+                  ? "Custom business branding active across invoices, receipts, and headers"
+                  : "Upload a store logo or storefront photo to personalize your shop"}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+              {/* Take Photo with Camera */}
+              <button
+                type="button"
+                onClick={() => logoCameraInputRef.current?.click()}
+                className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 active:scale-95"
+              >
+                <Camera className="w-4 h-4 text-slate-950" />
+                <span>Snap Storefront (Camera)</span>
+              </button>
+
+              {/* Upload Custom Logo File */}
+              <button
+                type="button"
+                onClick={() => logoFileInputRef.current?.click()}
+                className="px-3.5 py-2 bg-[#182133] hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 shadow-md cursor-pointer transition-all flex items-center gap-1.5 active:scale-95"
+              >
+                <Upload className="w-4 h-4 text-amber-400" />
+                <span>Upload Logo File</span>
+              </button>
+
+              {businessLogo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    setBusinessLogo("");
+                    onUpdateProfile({ businessLogo: "", logoUrl: "" });
+                    onShowToast("Business logo removed.", "info");
+                  }}
+                  className="px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-bold text-xs rounded-xl border border-rose-800 cursor-pointer transition-colors flex items-center gap-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Remove Logo</span>
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Ideal for store logos, kiosk signage, and product catalog branding.
+            </p>
+          </div>
+        </div>
+
+        {/* Preset Store Logo Feed */}
+        <div className="pt-4 border-t border-[#1A2333] space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs uppercase font-bold text-slate-400 flex items-center gap-1.5">
+              <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+              <span>Preset Retail & Kiosk Storefront Themes</span>
+            </label>
+            <span className="text-xs text-slate-500">Tap to apply preset logo</span>
+          </div>
+
+          <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+            {logoFeed.map((url, index) => {
+              const isSelected = businessLogo === url;
+              return (
+                <button
+                  key={`${url}-${index}`}
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    setBusinessLogo(url);
+                    onUpdateProfile({ businessLogo: url, logoUrl: url });
+                    onShowToast("Store logo applied!", "info");
+                  }}
+                  className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shrink-0 transition-all active:scale-95 relative cursor-pointer ${
+                    isSelected
+                      ? "border-amber-400 ring-4 ring-amber-400/40 scale-105 shadow-lg shadow-amber-400/20"
+                      : "border-slate-700 opacity-75 hover:opacity-100 hover:border-slate-500"
+                  }`}
+                  title="Click to apply store logo"
+                >
+                  <img
+                    src={url}
+                    alt={`Logo ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-amber-400/30 backdrop-blur-[1px] flex items-center justify-center">
+                      <Check className="w-5 h-5 text-slate-950 stroke-[3]" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 3: STORE & MERCHANT CREDENTIALS FORM */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-[#121826] border border-[#1F293D] shadow-xl space-y-5">
+        <div className="border-b border-[#1A2333] pb-4">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-amber-400" />
+            <span>Store & Merchant Details</span>
+          </h2>
+          <p className="text-xs text-slate-400">
+            Edit your store name, merchant display handle, and contact information
+          </p>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-amber-400" />
+                <span>Full Merchant Name</span>
+              </label>
               <div className="relative mt-1">
                 <input
                   type="text"
@@ -187,7 +671,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-400">Email</label>
+              <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5 text-amber-400" />
+                <span>Store / Kiosk Name</span>
+              </label>
+              <div className="relative mt-1">
+                <input
+                  type="text"
+                  required
+                  value={storeName}
+                  onChange={(e) => setStoreName(e.target.value)}
+                  placeholder="Setta Supermarket"
+                  className="w-full p-3 bg-[#0B0F19] border border-[#1A2333] rounded-xl text-sm font-semibold text-white focus:outline-hidden focus:border-amber-400 transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-amber-400" />
+                <span>Email Address / Login ID</span>
+              </label>
               <div className="relative mt-1">
                 <input
                   type="email"
@@ -201,7 +707,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-400">Phone</label>
+              <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-amber-400" />
+                <span>Contact Phone</span>
+              </label>
               <div className="relative mt-1">
                 <input
                   type="tel"
@@ -212,37 +721,64 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                <span>Physical Store Location</span>
+              </label>
+              <div className="relative mt-1">
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. Maseru Market, Stall 4B"
+                  className="w-full p-3 bg-[#0B0F19] border border-[#1A2333] rounded-xl text-sm font-semibold text-white focus:outline-hidden focus:border-amber-400 transition-colors"
+                />
+              </div>
+            </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-400">Role</label>
+              <label className="text-xs font-bold text-slate-400">Account Role</label>
               <div className="relative mt-1">
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                   className="w-full p-3 bg-[#0B0F19] border border-[#1A2333] rounded-xl text-sm font-semibold text-white focus:outline-hidden focus:border-amber-400 transition-colors cursor-pointer"
                 >
-                  <option value="Super Admin" className="bg-slate-900 text-white">Super Admin</option>
-                  <option value="Store Administrator" className="bg-slate-900 text-white">Store Administrator</option>
-                  <option value="Inventory Manager" className="bg-slate-900 text-white">Inventory Manager</option>
-                  <option value="Cashier / POS Clerk" className="bg-slate-900 text-white">Cashier / POS Clerk</option>
+                  <option value="Super Admin" className="bg-slate-900 text-white">
+                    Super Admin
+                  </option>
+                  <option value="Store Administrator" className="bg-slate-900 text-white">
+                    Store Administrator
+                  </option>
+                  <option value="Inventory Manager" className="bg-slate-900 text-white">
+                    Inventory Manager
+                  </option>
+                  <option value="Cashier / POS Clerk" className="bg-slate-900 text-white">
+                    Cashier / POS Clerk
+                  </option>
                 </select>
               </div>
             </div>
+          </div>
 
-            {/* Bright Yellow Save Changes Button matching the image */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                className="w-full py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-400/20 transition-all cursor-pointer"
-              >
-                Save Changes
-              </button>
-            </div>
+          {/* Bright Yellow Save Changes Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-400/20 transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+            >
+              <Check className="w-4 h-4 stroke-[3]" />
+              <span>Save Profile & Store Changes</span>
+            </button>
           </div>
         </form>
       </div>
 
-      {/* Security & Password Management Card */}
+      {/* SECTION 4: SECURITY & FIREBASE AUTH PASSWORD MANAGEMENT */}
       <div className="p-6 sm:p-8 rounded-3xl bg-[#121826] border border-[#1F293D] shadow-xl space-y-5">
         <div className="flex items-center justify-between border-b border-[#1A2333] pb-4">
           <div className="flex items-center gap-2.5">
@@ -251,7 +787,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Security & Password</h2>
-              <p className="text-xs text-slate-400">Update your Firebase authentication credentials</p>
+              <p className="text-xs text-slate-400">
+                Update your Firebase authentication credentials
+              </p>
             </div>
           </div>
         </div>
@@ -275,7 +813,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-bold text-slate-400">Current Password (verification)</label>
+            <label className="text-xs font-bold text-slate-400">
+              Current Password (verification)
+            </label>
             <input
               type={showPassword ? "text" : "password"}
               value={currentPassword}
@@ -287,7 +827,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-bold text-slate-400">New Password (min 6 chars)</label>
+              <label className="text-xs font-bold text-slate-400">
+                New Password (min 6 chars)
+              </label>
               <div className="relative mt-1">
                 <input
                   type={showPassword ? "text" : "password"}

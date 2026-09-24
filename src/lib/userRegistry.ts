@@ -15,6 +15,8 @@ export interface RegisteredAccount {
   proMonths?: number;
   proExpiresAt?: string;
   avatarUrl: string;
+  businessLogo?: string;
+  logoUrl?: string;
   createdAt: string;
 }
 
@@ -94,20 +96,35 @@ export function broadcastUsersChange(): void {
   } catch (e) {}
 }
 
+const DEMO_EMAILS = [
+  "merchant@inco.app",
+  "cashier1@inco.app",
+  "demo@inco.app",
+  "test@inco.app",
+  "demo-merchant@inco.app",
+  "john@example.com",
+];
+
 export function loadRegisteredAccounts(): RegisteredAccount[] {
   try {
     const raw = safeGetItem(STORAGE_USERS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // Strip out any legacy demo accounts to only show real registered users
+        const cleaned = parsed.filter(
+          (u) =>
+            u.emailOrPhone?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ||
+            (!DEMO_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) && !(u.id || "").startsWith("demo-"))
+        );
         // Ensure super admin is always present
-        const hasAdmin = parsed.some(
+        const hasAdmin = cleaned.some(
           (u) => u.emailOrPhone?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
         );
         if (!hasAdmin) {
-          parsed.unshift(DEFAULT_ACCOUNTS[0]);
+          cleaned.unshift(DEFAULT_ACCOUNTS[0]);
         }
-        return parsed;
+        return cleaned;
       }
     }
   } catch (e) {
@@ -390,11 +407,17 @@ export function convertAccountToUserProfile(acc: RegisteredAccount): UserProfile
     identifier: acc.emailOrPhone,
     displayName: acc.displayName,
     avatarUrl: acc.avatarUrl,
+    businessLogo: acc.businessLogo || acc.logoUrl,
+    logoUrl: acc.logoUrl || acc.businessLogo,
     role: acc.emailOrPhone.toLowerCase() === SUPER_ADMIN_EMAIL ? "admin" : (acc.role as any),
     isVerified: acc.isVerified,
     verificationStatus: acc.verificationStatus,
     accountStatus: acc.accountStatus,
     storeName: acc.storeName,
+    referralCode: (acc as any).referralCode || `INCO-${(acc.id || "USR").slice(0, 6).toUpperCase()}`,
+    referralCount: (acc as any).referralCount || 0,
+    referralRewardsUnlocked: (acc as any).referralRewardsUnlocked || [],
+    referralRewardsPending: (acc as any).referralRewardsPending || false,
     subscription: {
       plan: isProActive ? "INCO Pro AI" : "Free Starter",
       status: isProActive ? "active" : "free",

@@ -30,13 +30,22 @@ import {
   Send,
   HelpCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Gift,
+  Share2,
+  Copy,
+  MessageCircle,
+  Store,
+  Building2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { UserProfile, PaymentRequest, VerificationRequest } from "../types";
 import { BrandLogo } from "./BrandLogo";
 import { sounds } from "../lib/sound";
 import { encryptHealthData, decryptHealthData, HealthVaultData } from "../lib/crypto";
 import { useAuth } from "../context/AuthContext";
+import { compressImage, PRESET_AVATARS, PRESET_BUSINESS_LOGOS } from "../lib/imageUtils";
+import { safeStorage } from "../lib/safeStorage";
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -75,14 +84,116 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onShowToast,
 }) => {
   const { changePassword, deleteAccount } = useAuth();
-  const [activeTab, setActiveTab] = useState<"profile" | "health_vault" | "verification" | "subscription">("profile");
+  const [activeTab, setActiveTab] = useState<
+    "profile" | "referrals" | "health_vault" | "verification" | "subscription"
+  >("profile");
 
   // Profile Edit Form State
   const [displayName, setDisplayName] = useState(userProfile.displayName || "Store Merchant");
   const [avatarUrl, setAvatarUrl] = useState(userProfile.avatarUrl);
+  const [businessLogo, setBusinessLogo] = useState(userProfile.businessLogo || userProfile.logoUrl || "");
   const [storeName, setStoreName] = useState(userProfile.storeName || "Provision Store");
   const [location, setLocation] = useState(userProfile.location || "");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
+  const [isProcessingLogo, setIsProcessingLogo] = useState(false);
+
+  // Avatar Feed History State
+  const [avatarFeed, setAvatarFeed] = useState<string[]>(() => {
+    const stored = safeStorage.getJSON<string[]>("inco_user_avatar_feed", []);
+    return Array.from(new Set([userProfile.avatarUrl, ...stored, ...PRESET_AVATARS])).filter(Boolean);
+  });
+
+  // Business Logo Feed State
+  const [logoFeed, setLogoFeed] = useState<string[]>(() => {
+    const stored = safeStorage.getJSON<string[]>("inco_user_logo_feed", []);
+    return Array.from(
+      new Set([userProfile.businessLogo, userProfile.logoUrl, ...stored, ...PRESET_BUSINESS_LOGOS])
+    ).filter(Boolean) as string[];
+  });
+
+  // Referral & Rewards State
+  const referralCode =
+    userProfile.referralCode ||
+    `INCO-${(userProfile.storeName || userProfile.displayName || "VIP")
+      .replace(/[^A-Za-z0-9]/g, "")
+      .toUpperCase()
+      .slice(0, 6) || "SHOP"}-${(userProfile.id || "0000").slice(-4).toUpperCase()}`;
+
+  const referralLink = `${window.location.origin}/?ref=${referralCode}`;
+  const referralCount = userProfile.referralCount || 0;
+
+  // Reward Tiers:
+  // Tier 1: 1-2 Invites -> 10% Pro Discount
+  // Tier 2: 3-5 Invites -> 1 Month Free Pro AI
+  // Tier 3: 6-9 Invites -> 3 Months Free Pro AI + Priority Support
+  // Tier 4: 10+ Invites -> Lifetime Free Pro Access & VIP Store Badge
+  let currentTierTitle = "Starter Merchant";
+  let nextMilestoneGoal = 3;
+  let nextRewardLabel = "1 Month Free Pro AI";
+  let activePerk = "Share invite code with fellow store owners to unlock free perks!";
+  let currentTierBadge = "Bronze";
+
+  if (referralCount >= 10) {
+    currentTierTitle = "Platinum Partner";
+    currentTierBadge = "Platinum";
+    nextMilestoneGoal = 10;
+    nextRewardLabel = "Max Tier Reached!";
+    activePerk = "Lifetime Free Pro AI Access + VIP Merchant Badge Unlocked!";
+  } else if (referralCount >= 6) {
+    currentTierTitle = "Gold Ambassador";
+    currentTierBadge = "Gold";
+    nextMilestoneGoal = 10;
+    nextRewardLabel = "Lifetime Free Pro AI (10 Invites)";
+    activePerk = "3 Months Free Pro AI Active + Priority Phone Support";
+  } else if (referralCount >= 3) {
+    currentTierTitle = "Silver Advocate";
+    currentTierBadge = "Silver";
+    nextMilestoneGoal = 6;
+    nextRewardLabel = "3 Months Free Pro AI (6 Invites)";
+    activePerk = "1 Month Free Pro AI Unlocked and Active!";
+  } else if (referralCount >= 1) {
+    currentTierTitle = "Bronze Starter";
+    currentTierBadge = "Bronze";
+    nextMilestoneGoal = 3;
+    nextRewardLabel = "1 Month Free Pro AI (3 Invites)";
+    activePerk = "10% Subscription Discount Unlocked!";
+  }
+
+  const rewardProgressPercent =
+    nextMilestoneGoal > 0 ? Math.min(100, Math.round((referralCount / nextMilestoneGoal) * 100)) : 100;
+
+  const handleShareViaWhatsApp = () => {
+    sounds.playClick();
+    const message = `🚀 *Join INCO Smart Shop with my invite!*
+
+I use INCO for my store to scan barcodes, manage stock in seconds, and track profit with AI.
+
+Use my exclusive Merchant Code: *${referralCode}* to claim 1 Month FREE Pro AI features!
+
+👉 Register here: ${referralLink}`;
+
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
+    onShowToast("Opened WhatsApp to share your referral invite!", "success");
+  };
+
+  const handleCopyReferralCode = () => {
+    sounds.playClick();
+    navigator.clipboard?.writeText(referralCode);
+    onShowToast(`Referral code ${referralCode} copied!`, "success");
+  };
+
+  const handleCopyReferralLink = () => {
+    sounds.playClick();
+    navigator.clipboard?.writeText(referralLink);
+    onShowToast("Referral link copied to clipboard!", "success");
+  };
+
+  const handleClaimReward = () => {
+    sounds.playSuccess();
+    onShowToast("Reward perks active! Thank you for inviting merchants to INCO.", "success");
+  };
 
   // 30-Day Cooldown Math
   const lastUpdateTimestamp = userProfile.lastProfileUpdatedAt
@@ -195,22 +306,68 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [paymentSubmitted, setPaymentSubmitted] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarCameraInputRef = useRef<HTMLInputElement>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+  const logoCameraInputRef = useRef<HTMLInputElement>(null);
   const passportFileRef = useRef<HTMLInputElement>(null);
   const idDocFileRef = useRef<HTMLInputElement>(null);
   const paymentProofFileRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAvatarUrl(reader.result as string);
-        onUpdateProfile({ avatarUrl: reader.result as string });
-        sounds.playSuccess();
-      };
-      reader.readAsDataURL(file);
+  const handleAvatarFile = async (file: File) => {
+    setIsProcessingAvatar(true);
+    try {
+      const compressed = await compressImage(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.85,
+        format: "image/jpeg",
+      });
+
+      setAvatarUrl(compressed);
+      onUpdateProfile({ avatarUrl: compressed });
+      sounds.playSuccess();
+      onShowToast("Profile picture updated and saved to feed!", "success");
+
+      setAvatarFeed((prev) => {
+        const next = [compressed, ...prev.filter((p) => p !== compressed)].slice(0, 16);
+        safeStorage.setJSON("inco_user_avatar_feed", next);
+        return next;
+      });
+    } catch (err: any) {
+      console.error("[ProfileModal] Avatar upload error:", err);
+      onShowToast("Failed to process image. Please try another file.", "error");
+    } finally {
+      setIsProcessingAvatar(false);
+    }
+  };
+
+  const handleLogoFile = async (file: File) => {
+    setIsProcessingLogo(true);
+    try {
+      const compressed = await compressImage(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.85,
+        format: "image/jpeg",
+      });
+
+      setBusinessLogo(compressed);
+      onUpdateProfile({ businessLogo: compressed, logoUrl: compressed });
+      sounds.playSuccess();
+      onShowToast("Business & store logo updated successfully!", "success");
+
+      setLogoFeed((prev) => {
+        const next = [compressed, ...prev.filter((p) => p !== compressed)].slice(0, 16);
+        safeStorage.setJSON("inco_user_logo_feed", next);
+        return next;
+      });
+    } catch (err: any) {
+      console.error("[ProfileModal] Logo upload error:", err);
+      onShowToast("Failed to process logo image. Please try another file.", "error");
+    } finally {
+      setIsProcessingLogo(false);
     }
   };
 
@@ -226,6 +383,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     onUpdateProfile({
       displayName: displayName.trim(),
       avatarUrl,
+      businessLogo,
+      logoUrl: businessLogo,
       storeName: storeName.trim(),
       location: location.trim(),
       lastProfileUpdatedAt: new Date().toISOString(),
@@ -543,6 +702,25 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             type="button"
             onClick={() => {
               sounds.playClick();
+              setActiveTab("referrals");
+            }}
+            className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
+              activeTab === "referrals"
+                ? "border-yellow-400 text-yellow-400"
+                : "border-transparent text-slate-400 hover:text-white"
+            }`}
+          >
+            <Gift className="w-3.5 h-3.5 text-yellow-400" />
+            <span>Invites & Rewards</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-black border border-emerald-500/30">
+              {referralCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              sounds.playClick();
               setActiveTab("health_vault");
             }}
             className={`pb-2 px-2.5 font-black border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
@@ -628,70 +806,295 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
             </div>
 
-            {/* Avatar Row */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 p-3 bg-slate-950/70 rounded-xl border border-slate-800">
-              <div className="relative group">
-                <img
-                  src={avatarUrl}
-                  alt={displayName}
-                  className="w-16 h-16 rounded-2xl object-cover border-2 border-yellow-400 ring-4 ring-yellow-400/20 shadow-lg"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute inset-0 bg-slate-950/60 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] font-bold"
-                >
-                  <Camera className="w-4 h-4 mb-0.5 text-yellow-400" />
-                  <span>Change</span>
-                </button>
+            {/* Profile Picture Upload Feed */}
+            <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleAvatarFile(file);
+                }}
+              />
+              <input
+                type="file"
+                ref={avatarCameraInputRef}
+                accept="image/*"
+                capture="user"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleAvatarFile(file);
+                }}
+              />
+
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="relative group shrink-0">
+                  <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-yellow-400 ring-4 ring-yellow-400/20 shadow-lg bg-slate-900 flex items-center justify-center">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-yellow-400 font-black text-xl">
+                        {displayName.slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 bg-slate-950/70 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] font-bold"
+                  >
+                    <Camera className="w-4 h-4 mb-0.5 text-yellow-400" />
+                    <span>Upload</span>
+                  </button>
+                </div>
+
+                <div className="flex-1 text-center sm:text-left space-y-1">
+                  <div className="flex items-center justify-center sm:justify-start gap-1.5">
+                    <h3 className="text-sm font-black text-white">{displayName}</h3>
+                    <span className="text-[9px] uppercase font-black px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-300 border border-indigo-500/40">
+                      {userProfile.role}
+                    </span>
+                    {isProcessingAvatar && (
+                      <span className="text-[10px] text-yellow-400 font-bold animate-pulse">
+                        Optimizing...
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-mono">{userProfile.identifier}</p>
+
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => avatarCameraInputRef.current?.click()}
+                      className="px-2.5 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 text-[10px] font-black rounded-lg inline-flex items-center gap-1 cursor-pointer transition-colors shadow-xs active:scale-95"
+                    >
+                      <Camera className="w-3 h-3 text-slate-950" />
+                      <span>Take Photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold rounded-lg inline-flex items-center gap-1 border border-slate-700 cursor-pointer transition-colors active:scale-95"
+                    >
+                      <Upload className="w-3 h-3 text-yellow-400" />
+                      <span>Upload Custom</span>
+                    </button>
+                    <span className="text-[9px] text-slate-500">Camera, JPG, PNG, WebP</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex-1 text-center sm:text-left space-y-1">
-                <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                  <h3 className="text-sm font-black text-white">{displayName}</h3>
-                  <span className="text-[9px] uppercase font-black px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-300 border border-indigo-500/40">
-                    {userProfile.role}
-                  </span>
+              {/* Uploads & Preset Avatar Feed */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-yellow-400" />
+                    <span>Profile Photo Feed & Avatar Gallery</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500">Tap avatar to switch</span>
                 </div>
-                <p className="text-[11px] text-slate-400 font-mono">{userProfile.identifier}</p>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+                  {/* Camera Launcher in Feed */}
+                  <button
+                    type="button"
+                    onClick={() => avatarCameraInputRef.current?.click()}
+                    className="w-10 h-10 rounded-xl border border-dashed border-yellow-400/60 hover:border-yellow-400 bg-yellow-400/10 flex flex-col items-center justify-center text-yellow-400 shrink-0 cursor-pointer transition-all"
+                    title="Take Photo with Camera"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span className="text-[7px] font-black">Camera</span>
+                  </button>
 
-                <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                  {/* Upload button inside feed */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-10 h-10 rounded-xl border border-dashed border-slate-600 hover:border-slate-400 bg-slate-800/40 flex flex-col items-center justify-center text-slate-300 shrink-0 cursor-pointer transition-all"
+                    title="Upload New Photo"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span className="text-[7px] font-bold">File</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-2 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-[10px] font-bold rounded-lg border border-slate-700 inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <Upload className="w-3 h-3 text-yellow-400" />
-                  <span>Upload Custom Photo</span>
-                </button>
+                  {avatarFeed.map((url, index) => {
+                    const isSelected = avatarUrl === url;
+                    return (
+                      <button
+                        key={`${url}-${index}`}
+                        type="button"
+                        onClick={() => {
+                          sounds.playClick();
+                          setAvatarUrl(url);
+                          onUpdateProfile({ avatarUrl: url });
+                          onShowToast("Profile avatar selected!", "info");
+                        }}
+                        className={`w-10 h-10 rounded-xl overflow-hidden border-2 shrink-0 transition-transform active:scale-95 relative cursor-pointer ${
+                          isSelected
+                            ? "border-yellow-400 ring-2 ring-yellow-400/50 scale-105"
+                            : "border-slate-700 opacity-70 hover:opacity-100"
+                        }`}
+                        title="Click to apply avatar"
+                      >
+                        <img src={url} alt={`Avatar ${index + 1}`} className="w-full h-full object-cover" />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-yellow-400/20 flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5 text-yellow-400 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
-            {/* Quick Preset Avatars */}
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
-                Select Cyber Preset Avatar
-              </label>
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {AVATAR_PRESETS.map((url, index) => (
+            {/* Business Logo & Storefront Branding Section */}
+            <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+              <input
+                type="file"
+                ref={logoFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLogoFile(file);
+                }}
+              />
+              <input
+                type="file"
+                ref={logoCameraInputRef}
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLogoFile(file);
+                }}
+              />
+
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="relative group shrink-0">
+                  <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-yellow-400/60 ring-2 ring-yellow-400/10 shadow-lg bg-slate-900 flex items-center justify-center p-0.5">
+                    {businessLogo ? (
+                      <img
+                        src={businessLogo}
+                        alt="Business Logo"
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-slate-500">
+                        <Store className="w-6 h-6 text-yellow-400/60 mb-0.5" />
+                        <span className="text-[7px] uppercase font-bold text-slate-400">No Logo</span>
+                      </div>
+                    )}
+                  </div>
                   <button
-                    key={index}
                     type="button"
-                    onClick={() => {
-                      sounds.playClick();
-                      setAvatarUrl(url);
-                      onUpdateProfile({ avatarUrl: url });
-                    }}
-                    className={`w-9 h-9 rounded-xl overflow-hidden border-2 shrink-0 transition-transform active:scale-95 ${
-                      avatarUrl === url
-                        ? "border-yellow-400 ring-2 ring-yellow-400/50 scale-105"
-                        : "border-slate-700 opacity-70 hover:opacity-100"
-                    }`}
+                    onClick={() => logoFileInputRef.current?.click()}
+                    className="absolute inset-0 bg-slate-950/70 rounded-2xl flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] font-bold"
                   >
-                    <img src={url} alt="Preset" className="w-full h-full object-cover" />
+                    <Store className="w-4 h-4 mb-0.5 text-yellow-400" />
+                    <span>Upload</span>
                   </button>
-                ))}
+                </div>
+
+                <div className="flex-1 text-center sm:text-left space-y-1">
+                  <div className="flex items-center justify-center sm:justify-start gap-1.5">
+                    <h3 className="text-sm font-black text-white flex items-center gap-1">
+                      <Store className="w-3.5 h-3.5 text-yellow-400" />
+                      <span>{storeName || "Store & Business Logo"}</span>
+                    </h3>
+                    {isProcessingLogo && (
+                      <span className="text-[10px] text-yellow-400 font-bold animate-pulse">
+                        Optimizing...
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {businessLogo ? "Store logo active on receipts and kiosk headers" : "Add your store logo or storefront picture"}
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => logoCameraInputRef.current?.click()}
+                      className="px-2.5 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 text-[10px] font-black rounded-lg inline-flex items-center gap-1 cursor-pointer transition-colors shadow-xs active:scale-95"
+                    >
+                      <Camera className="w-3 h-3 text-slate-950" />
+                      <span>Snap Storefront</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => logoFileInputRef.current?.click()}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold rounded-lg inline-flex items-center gap-1 border border-slate-700 cursor-pointer transition-colors active:scale-95"
+                    >
+                      <Upload className="w-3 h-3 text-yellow-400" />
+                      <span>Upload Logo</span>
+                    </button>
+                    {businessLogo && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sounds.playClick();
+                          setBusinessLogo("");
+                          onUpdateProfile({ businessLogo: "", logoUrl: "" });
+                          onShowToast("Store logo removed.", "info");
+                        }}
+                        className="px-2 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-[10px] font-bold rounded-lg border border-rose-800 cursor-pointer transition-colors"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Preset Business Logo Options */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <ImageIcon className="w-3 h-3 text-yellow-400" />
+                    <span>Preset Retail & Shop Themes</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500">Tap to apply</span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+                  {logoFeed.map((url, index) => {
+                    const isSelected = businessLogo === url;
+                    return (
+                      <button
+                        key={`${url}-${index}`}
+                        type="button"
+                        onClick={() => {
+                          sounds.playClick();
+                          setBusinessLogo(url);
+                          onUpdateProfile({ businessLogo: url, logoUrl: url });
+                          onShowToast("Store logo applied!", "info");
+                        }}
+                        className={`w-10 h-10 rounded-xl overflow-hidden border-2 shrink-0 transition-transform active:scale-95 relative cursor-pointer ${
+                          isSelected
+                            ? "border-yellow-400 ring-2 ring-yellow-400/50 scale-105"
+                            : "border-slate-700 opacity-70 hover:opacity-100"
+                        }`}
+                        title="Click to apply logo"
+                      >
+                        <img src={url} alt={`Store Logo ${index + 1}`} className="w-full h-full object-cover" />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-yellow-400/20 flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5 text-yellow-400 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -896,6 +1299,148 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 >
                   Delete Account
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Invites & Referral Rewards */}
+        {activeTab === "referrals" && (
+          <div className="p-3 sm:p-4 space-y-4 overflow-y-auto flex-1 text-xs">
+            {/* Header Banner */}
+            <div className="p-3 bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-transparent rounded-xl border border-yellow-400/30 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-yellow-400 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-md">
+                <Gift className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-white">Merchant Referral & Rewards Program</h3>
+                  <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded-full bg-yellow-400 text-slate-950">
+                    {currentTierBadge} Tier
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Invite other store owners and shopkeepers to INCO. When they register using your invite link, you both unlock free months of Pro AI, barcode scanning, and POS features!
+                </p>
+              </div>
+            </div>
+
+            {/* Live Reward Status Bar */}
+            <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Current Reward Status</div>
+                  <div className="text-sm font-black text-white flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-yellow-400" />
+                    <span>{currentTierTitle}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Total Invites</div>
+                  <div className="text-sm font-black text-yellow-400">{referralCount} Stores</div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">
+                    Goal: {referralCount} / {nextMilestoneGoal} Invites ({rewardProgressPercent}%)
+                  </span>
+                  <span className="font-bold text-yellow-400">{nextRewardLabel}</span>
+                </div>
+                <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                  <div
+                    className="h-full bg-gradient-to-r from-yellow-400 via-amber-400 to-emerald-400 rounded-full transition-all duration-500 shadow-sm"
+                    style={{ width: `${Math.max(5, rewardProgressPercent)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Active Perk Pill */}
+              <div className="p-2.5 bg-yellow-400/10 border border-yellow-400/30 rounded-xl flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-yellow-400 shrink-0" />
+                  <span className="text-[11px] font-bold text-yellow-200">{activePerk}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClaimReward}
+                  className="px-2.5 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black rounded-lg text-[10px] shrink-0 cursor-pointer shadow-xs transition-colors"
+                >
+                  Claim Perks
+                </button>
+              </div>
+
+              {/* Milestone Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <div className={`p-2 rounded-xl border text-center ${referralCount >= 1 ? "bg-yellow-400/10 border-yellow-400/40 text-yellow-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
+                  <div className="text-[10px] font-bold">1-2 Invites</div>
+                  <div className="text-[9px] font-black">10% Pro Discount</div>
+                </div>
+                <div className={`p-2 rounded-xl border text-center ${referralCount >= 3 ? "bg-yellow-400/10 border-yellow-400/40 text-yellow-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
+                  <div className="text-[10px] font-bold">3-5 Invites</div>
+                  <div className="text-[9px] font-black">1 Month Free Pro</div>
+                </div>
+                <div className={`p-2 rounded-xl border text-center ${referralCount >= 6 ? "bg-yellow-400/10 border-yellow-400/40 text-yellow-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
+                  <div className="text-[10px] font-bold">6-9 Invites</div>
+                  <div className="text-[9px] font-black">3 Months Free Pro</div>
+                </div>
+                <div className={`p-2 rounded-xl border text-center ${referralCount >= 10 ? "bg-yellow-400/10 border-yellow-400/40 text-yellow-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
+                  <div className="text-[10px] font-bold">10+ Invites</div>
+                  <div className="text-[9px] font-black">Lifetime Free VIP</div>
+                </div>
+              </div>
+            </div>
+
+            {/* WhatsApp Invite Share & Referral Code */}
+            <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
+              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Share2 className="w-3.5 h-3.5 text-yellow-400" />
+                <span>Invite Capabilities & WhatsApp Share</span>
+              </h4>
+
+              {/* Prominent WhatsApp Invite Button */}
+              <button
+                type="button"
+                onClick={handleShareViaWhatsApp}
+                className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-950/50 cursor-pointer transition-all active:scale-[0.99]"
+              >
+                <MessageCircle className="w-5 h-5 fill-slate-950 stroke-emerald-500" />
+                <span>Send Referral Through WhatsApp</span>
+              </button>
+
+              {/* Referral Code & Link Box */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Your Referral Code</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-black text-yellow-400 text-sm">{referralCode}</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyReferralCode}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Copy className="w-3 h-3 text-yellow-400" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Direct Invite Link</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[10px] text-slate-300 truncate">{referralLink}</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyReferralLink}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                    >
+                      <Copy className="w-3 h-3 text-yellow-400" />
+                      <span>Copy Link</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

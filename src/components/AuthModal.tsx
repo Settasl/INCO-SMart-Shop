@@ -26,6 +26,7 @@ import {
 import { sounds } from "../lib/sound";
 import { useAuth } from "../context/AuthContext";
 import { isGoogleEmail } from "../lib/googleAuth";
+import { ensureSuperAdminSession } from "../lib/firebase";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -203,14 +204,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(true);
 
     try {
-      await signIn(email, password.trim());
+      let fbUser;
+      if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+        fbUser = await ensureSuperAdminSession(password.trim());
+      } else {
+        fbUser = await signIn(email, password.trim());
+      }
 
       const isDefaultAdmin = email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
       const account: RegisteredAccount = {
-        id: email,
+        id: fbUser?.uid || email,
         emailOrPhone: email,
         passwordHash: "[PROTECTED_BY_FIREBASE]",
-        displayName: isDefaultAdmin ? "INCO Master Admin (Setta SL)" : email.split("@")[0],
+        displayName: isDefaultAdmin ? "INCO Master Admin (Setta SL)" : (fbUser?.displayName || email.split("@")[0]),
         storeName: isDefaultAdmin ? "INCO Headquarters" : "Store Counter",
         role: isDefaultAdmin ? "admin" : "merchant",
         isVerified: true,

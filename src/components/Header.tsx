@@ -146,15 +146,23 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-2.5 p-1 sm:px-3 sm:py-1.5 rounded-xl bg-[#1E1E1E] hover:bg-[#2A2A2A] border border-white/10 transition-colors cursor-pointer"
               title="View Profile"
             >
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#E5F107] text-[#252525] font-black text-xs flex items-center justify-center shadow-xs">
-                {userProfile?.displayName
-                  ? userProfile.displayName
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .toUpperCase()
-                      .slice(0, 2)
-                  : "SH"}
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#E5F107] text-[#252525] font-black text-xs flex items-center justify-center shadow-xs overflow-hidden border border-white/20">
+                {userProfile?.avatarUrl ? (
+                  <img
+                    src={userProfile.avatarUrl}
+                    alt={userProfile.displayName || "Avatar"}
+                    className="w-full h-full object-cover"
+                  />
+                ) : userProfile?.displayName ? (
+                  userProfile.displayName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                    .slice(0, 2)
+                ) : (
+                  "SH"
+                )}
               </div>
               <div className="hidden sm:flex flex-col text-left leading-tight">
                 <span className="text-xs font-bold text-white truncate max-w-[120px]">

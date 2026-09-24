@@ -74,12 +74,14 @@ import {
   syncItemsToBusinessFirestore,
   executeSaleTransactionAtomic,
   fetchAllUsersFromFirestore,
+  subscribeToAllUsersFromFirestore,
   updateUserInFirestore,
   deleteUserFromFirestore,
 } from "./lib/firebase";
 import { useAuth } from "./context/AuthContext";
 import { useBusiness } from "./context/BusinessContext";
 import { recordAuditLog } from "./lib/auditService";
+import { safeStorage } from "./lib/safeStorage";
 
 const DEFAULT_SETTINGS: StoreSettings = {
   storeName: "INCO Smart Shop",
@@ -105,7 +107,7 @@ export function App() {
   const [activeView, setActiveView] = useState<string>("dashboard");
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [showSplash, setShowSplash] = useState<boolean>(() => {
-    return !localStorage.getItem("inco_splash_dismissed");
+    return !safeStorage.getItem("inco_splash_dismissed");
   });
 
   // User Accounts & Authentication
@@ -175,34 +177,28 @@ export function App() {
 
   // Inventory & Store State
   const [items, setItems] = useState<InventoryItem[]>(() => {
-    const saved = localStorage.getItem("inco_inventory_items");
-    return saved ? JSON.parse(saved) : INITIAL_INVENTORY;
+    return safeStorage.getJSON<InventoryItem[]>("inco_inventory_items", INITIAL_INVENTORY);
   });
 
   const [movements, setMovements] = useState<StockMovement[]>(() => {
-    const saved = localStorage.getItem("inco_stock_movements");
-    return saved ? JSON.parse(saved) : [];
+    return safeStorage.getJSON<StockMovement[]>("inco_stock_movements", []);
   });
 
   const [credits, setCredits] = useState<CreditRecord[]>(() => {
-    const saved = localStorage.getItem("inco_credit_records");
-    return saved ? JSON.parse(saved) : INITIAL_CREDIT_RECORDS;
+    return safeStorage.getJSON<CreditRecord[]>("inco_credit_records", INITIAL_CREDIT_RECORDS);
   });
 
   const [cashAtHand, setCashAtHand] = useState<number>(() => {
-    const saved = localStorage.getItem("inco_cash_at_hand");
+    const saved = safeStorage.getItem("inco_cash_at_hand");
     return saved ? parseFloat(saved) : 0.0;
   });
 
   const [settings, setSettings] = useState<StoreSettings>(() => {
-    const saved = localStorage.getItem("inco_store_settings");
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    return safeStorage.getJSON<StoreSettings>("inco_store_settings", DEFAULT_SETTINGS);
   });
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem("inco_dark_mode");
-    if (saved !== null) return JSON.parse(saved);
-    return false; // Default clean, bright, premium UI as specified
+    return safeStorage.getJSON<boolean>("inco_dark_mode", false);
   });
 
   // Filter & Search state
@@ -231,18 +227,15 @@ export function App() {
 
   // Community Chat & Back-office State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem("inco_chat_messages");
-    return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+    return safeStorage.getJSON<ChatMessage[]>("inco_chat_messages", INITIAL_CHAT_MESSAGES);
   });
 
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>(() => {
-    const saved = localStorage.getItem("inco_payment_requests");
-    return saved ? JSON.parse(saved) : INITIAL_PAYMENT_REQUESTS;
+    return safeStorage.getJSON<PaymentRequest[]>("inco_payment_requests", INITIAL_PAYMENT_REQUESTS);
   });
 
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>(() => {
-    const saved = localStorage.getItem("inco_verification_requests");
-    return saved ? JSON.parse(saved) : INITIAL_VERIFICATION_REQUESTS;
+    return safeStorage.getJSON<VerificationRequest[]>("inco_verification_requests", INITIAL_VERIFICATION_REQUESTS);
   });
 
   // Toast feedback
@@ -268,7 +261,7 @@ export function App() {
 
   // Sync to local cache and fallback Firestore
   useEffect(() => {
-    localStorage.setItem("inco_inventory_items", JSON.stringify(items));
+    safeStorage.setJSON("inco_inventory_items", items);
     if (activeBusinessId) {
       syncItemsToBusinessFirestore(activeBusinessId, items).catch(() => {});
     } else if (userPhoneOrEmail) {
@@ -277,23 +270,23 @@ export function App() {
   }, [items, activeBusinessId, userPhoneOrEmail]);
 
   useEffect(() => {
-    localStorage.setItem("inco_stock_movements", JSON.stringify(movements));
+    safeStorage.setJSON("inco_stock_movements", movements);
   }, [movements]);
 
   useEffect(() => {
-    localStorage.setItem("inco_credit_records", JSON.stringify(credits));
+    safeStorage.setJSON("inco_credit_records", credits);
   }, [credits]);
 
   useEffect(() => {
-    localStorage.setItem("inco_cash_at_hand", cashAtHand.toString());
+    safeStorage.setItem("inco_cash_at_hand", cashAtHand.toString());
   }, [cashAtHand]);
 
   useEffect(() => {
-    localStorage.setItem("inco_store_settings", JSON.stringify(settings));
+    safeStorage.setJSON("inco_store_settings", settings);
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem("inco_dark_mode", JSON.stringify(darkMode));
+    safeStorage.setJSON("inco_dark_mode", darkMode);
     if (darkMode) {
       document.documentElement.classList.add("dark");
       document.body.classList.add("dark");
@@ -308,15 +301,15 @@ export function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    localStorage.setItem("inco_chat_messages", JSON.stringify(chatMessages));
+    safeStorage.setJSON("inco_chat_messages", chatMessages);
   }, [chatMessages]);
 
   useEffect(() => {
-    localStorage.setItem("inco_payment_requests", JSON.stringify(paymentRequests));
+    safeStorage.setJSON("inco_payment_requests", paymentRequests);
   }, [paymentRequests]);
 
   useEffect(() => {
-    localStorage.setItem("inco_verification_requests", JSON.stringify(verificationRequests));
+    safeStorage.setJSON("inco_verification_requests", verificationRequests);
   }, [verificationRequests]);
 
   // Admin Users List from Firestore
@@ -333,6 +326,16 @@ export function App() {
       console.warn("[Admin] Firestore user fetch error:", e);
     }
     setAdminUsersList(loadRegisteredAccounts().map(convertAccountToUserProfile));
+  }, []);
+
+  // Real-time Firestore users subscription for live cross-device Admin Portal updates
+  useEffect(() => {
+    const unsub = subscribeToAllUsersFromFirestore((liveUsers) => {
+      if (Array.isArray(liveUsers) && liveUsers.length > 0) {
+        setAdminUsersList(liveUsers);
+      }
+    });
+    return () => unsub();
   }, []);
 
   // Initial and reactive sync of registered users with the backend database
@@ -444,11 +447,20 @@ export function App() {
   // Profile update handler
   const handleUpdateProfile = (updates: Partial<UserProfile>) => {
     if (!currentAccount) return;
+    const newLogo =
+      updates.businessLogo !== undefined
+        ? updates.businessLogo
+        : updates.logoUrl !== undefined
+        ? updates.logoUrl
+        : currentAccount.businessLogo;
+
     const updatedAccount: RegisteredAccount = {
       ...currentAccount,
       displayName: updates.displayName || currentAccount.displayName,
       storeName: updates.storeName || currentAccount.storeName,
       avatarUrl: updates.avatarUrl || currentAccount.avatarUrl,
+      businessLogo: newLogo,
+      logoUrl: newLogo,
     };
 
     const accounts = registeredAccounts.map((a) =>
@@ -459,10 +471,31 @@ export function App() {
     setCurrentAccount(updatedAccount);
     setActiveSessionUser(updatedAccount);
 
-    if (updates.storeName) {
-      setSettings((prev) => ({ ...prev, storeName: updates.storeName! }));
-    }
-    showToast("Profile information updated successfully!", "success");
+    setSettings((prev) => ({
+      ...prev,
+      storeName: updates.storeName || prev.storeName,
+      storeLogo: newLogo !== undefined ? newLogo : prev.storeLogo,
+      businessLogo: newLogo !== undefined ? newLogo : prev.businessLogo,
+    }));
+
+    // Multi-cloud sync to Firestore and backend Express server
+    updateUserInFirestore(currentAccount.id, {
+      displayName: updatedAccount.displayName,
+      storeName: updatedAccount.storeName,
+      avatarUrl: updatedAccount.avatarUrl,
+      businessLogo: updatedAccount.businessLogo,
+      logoUrl: updatedAccount.logoUrl,
+    } as any).catch(() => {});
+
+    updateUserOnBackend(currentAccount.id, {
+      displayName: updatedAccount.displayName,
+      storeName: updatedAccount.storeName,
+      avatarUrl: updatedAccount.avatarUrl,
+      businessLogo: updatedAccount.businessLogo,
+      logoUrl: updatedAccount.logoUrl,
+    } as any).catch(() => {});
+
+    showToast("Profile & Store branding updated successfully!", "success");
   };
 
   // Verification request submit

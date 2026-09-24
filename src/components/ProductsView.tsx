@@ -9,6 +9,10 @@ import {
   Boxes,
   Edit2,
   Trash2,
+  CheckSquare,
+  Square,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import { InventoryItem, StoreSettings } from "../types";
 import { sounds } from "../lib/sound";
@@ -19,6 +23,7 @@ interface ProductsViewProps {
   onAddItem: (item: Partial<InventoryItem>) => void;
   onUpdateItem: (item: InventoryItem) => void;
   onDeleteItem: (id: string) => void;
+  onDeleteMultipleItems?: (ids: string[]) => void;
   onUpdateQuantity: (id: string, delta: number, note?: string) => void;
 }
 
@@ -28,11 +33,14 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   onAddItem,
   onUpdateItem,
   onDeleteItem,
+  onDeleteMultipleItems,
   onUpdateQuantity,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isConfirmDeleteModalOpen, setIsConfirmDeleteModalOpen] = useState(false);
 
   // New item form state
   const [newName, setNewName] = useState("");
@@ -61,6 +69,37 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       return matchCat && matchSearch;
     });
   }, [items, selectedCategory, searchQuery]);
+
+  const areAllFilteredSelected =
+    filteredItems.length > 0 &&
+    filteredItems.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    sounds.playClick();
+    if (areAllFilteredSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredItems.map((i) => i.id));
+    }
+  };
+
+  const toggleSelectItem = (id: string) => {
+    sounds.playClick();
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleConfirmBulkDelete = () => {
+    sounds.playStockRemove();
+    if (onDeleteMultipleItems) {
+      onDeleteMultipleItems(selectedIds);
+    } else {
+      selectedIds.forEach((id) => onDeleteItem(id));
+    }
+    setSelectedIds([]);
+    setIsConfirmDeleteModalOpen(false);
+  };
 
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,11 +179,29 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       </div>
 
       {/* Products Table Card */}
-      <div className="rounded-2xl bg-white dark:bg-[#1E1E1E] border border-slate-200 dark:border-white/10 shadow-xs overflow-hidden">
+      <div className="rounded-2xl bg-white dark:bg-[#1E1E1E] border border-slate-200 dark:border-white/10 shadow-xs overflow-hidden relative">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="border-b border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-black/20 text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
               <tr>
+                <th className="py-3.5 px-3 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="p-1 hover:text-[#252525] dark:hover:text-[#E5F107] cursor-pointer"
+                    title={areAllFilteredSelected ? "Deselect All" : "Select All Products"}
+                  >
+                    {areAllFilteredSelected ? (
+                      <CheckSquare className="w-4 h-4 text-[#252525] dark:text-[#E5F107]" />
+                    ) : selectedIds.length > 0 ? (
+                      <div className="w-4 h-4 rounded bg-[#E5F107] text-[#252525] text-[10px] font-black flex items-center justify-center">
+                        {selectedIds.length}
+                      </div>
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-4">Product</th>
                 <th className="py-3.5 px-4">Category</th>
                 <th className="py-3.5 px-4">Price</th>
@@ -157,6 +214,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               {filteredItems.map((item) => {
                 const isOutOfStock = item.quantity === 0;
                 const isLowStock = !isOutOfStock && item.quantity <= (item.reorderPoint || 5);
+                const isSelected = selectedIds.includes(item.id);
                 const statusLabel = isOutOfStock
                   ? "Out of Stock"
                   : isLowStock
@@ -164,7 +222,29 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   : "In Stock";
 
                 return (
-                  <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors">
+                  <tr
+                    key={item.id}
+                    className={`transition-colors ${
+                      isSelected
+                        ? "bg-[#E5F107]/10 dark:bg-[#E5F107]/10"
+                        : "hover:bg-slate-50/80 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    {/* Multi-select Checkbox */}
+                    <td className="py-3 px-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectItem(item.id)}
+                        className="p-1 hover:text-[#252525] dark:hover:text-[#E5F107] cursor-pointer"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-[#252525] dark:text-[#E5F107]" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                        )}
+                      </button>
+                    </td>
+
                     {/* Product */}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
@@ -257,6 +337,72 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Floating Bulk Actions Bar when items are selected */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#252525] text-white px-4 sm:px-6 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 sm:gap-6 animate-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-[#E5F107] text-[#252525] font-black text-xs flex items-center justify-center">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs sm:text-sm font-bold">
+              {selectedIds.length === 1 ? "1 product selected" : `${selectedIds.length} products selected`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsConfirmDeleteModalOpen(true)}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected</span>
+            </button>
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Bulk Product Deletion */}
+      {isConfirmDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1E1E1E] rounded-2xl max-w-sm w-full p-5 border border-slate-200 dark:border-white/10 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-[#252525] dark:text-white">Delete Selected Products?</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Are you sure you want to permanently delete {selectedIds.length} product(s)? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsConfirmDeleteModalOpen(false)}
+                className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-xs transition-colors cursor-pointer"
+              >
+                Delete {selectedIds.length} Item(s)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Product Modal */}
       {isAddModalOpen && (
