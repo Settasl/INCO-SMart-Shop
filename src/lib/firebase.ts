@@ -377,6 +377,27 @@ export async function syncUserFirestoreRecord(
   }
 }
 
+const DEMO_BLOCKED_USERS = [
+  "merchant@kiosk.com",
+  "david@kiosk.com",
+  "merchant@inco.app",
+  "cashier1@inco.app",
+  "demo@inco.app",
+  "test@inco.app",
+  "demo-merchant@inco.app",
+  "john@example.com",
+];
+
+function isRealMerchantUser(d: any, docId: string): boolean {
+  const email = (d.email || d.identifier || docId || "").toLowerCase();
+  const uid = (d.uid || docId || "").toLowerCase();
+  if (email === "settaholdings@gmail.com") return true;
+  if (DEMO_BLOCKED_USERS.includes(email)) return false;
+  if (email.includes("kiosk.com")) return false;
+  if (uid.startsWith("demo-") || uid.startsWith("user-demo-")) return false;
+  return true;
+}
+
 /**
  * Retrieves all registered users from Firestore (accessible by platform super-admin)
  */
@@ -388,21 +409,23 @@ export async function fetchAllUsersFromFirestore(): Promise<any[]> {
     snapshot.forEach((docSnap) => {
       if (docSnap.exists()) {
         const d = docSnap.data();
-        users.push({
-          id: d.uid || docSnap.id,
-          uid: d.uid || docSnap.id,
-          identifier: d.email || docSnap.id,
-          displayName: d.displayName || d.email?.split("@")[0] || "Merchant",
-          storeName: d.storeName || "My Store",
-          role: d.role || "merchant",
-          isVerified: !!d.isVerified,
-          verificationStatus: d.verificationStatus || "none",
-          accountStatus: d.accountStatus || "active",
-          avatarUrl: d.photoURL || d.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
-          activeBusinessId: d.activeBusinessId,
-          createdAt: d.createdAt || new Date().toISOString(),
-          updatedAt: d.updatedAt,
-        });
+        if (isRealMerchantUser(d, docSnap.id)) {
+          users.push({
+            id: d.uid || docSnap.id,
+            uid: d.uid || docSnap.id,
+            identifier: d.email || docSnap.id,
+            displayName: d.displayName || d.email?.split("@")[0] || "Merchant",
+            storeName: d.storeName || "My Store",
+            role: d.role || "merchant",
+            isVerified: !!d.isVerified,
+            verificationStatus: d.verificationStatus || "none",
+            accountStatus: d.accountStatus || "active",
+            avatarUrl: d.photoURL || d.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
+            activeBusinessId: d.activeBusinessId,
+            createdAt: d.createdAt || new Date().toISOString(),
+            updatedAt: d.updatedAt,
+          });
+        }
       }
     });
     return users;
@@ -429,21 +452,23 @@ export function subscribeToAllUsersFromFirestore(
         snapshot.forEach((docSnap) => {
           if (docSnap.exists()) {
             const d = docSnap.data();
-            users.push({
-              id: d.uid || docSnap.id,
-              uid: d.uid || docSnap.id,
-              identifier: d.email || docSnap.id,
-              displayName: d.displayName || d.email?.split("@")[0] || "Merchant",
-              storeName: d.storeName || "My Store",
-              role: d.role || "merchant",
-              isVerified: !!d.isVerified,
-              verificationStatus: d.verificationStatus || "none",
-              accountStatus: d.accountStatus || "active",
-              avatarUrl: d.photoURL || d.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
-              activeBusinessId: d.activeBusinessId,
-              createdAt: d.createdAt || new Date().toISOString(),
-              updatedAt: d.updatedAt,
-            });
+            if (isRealMerchantUser(d, docSnap.id)) {
+              users.push({
+                id: d.uid || docSnap.id,
+                uid: d.uid || docSnap.id,
+                identifier: d.email || docSnap.id,
+                displayName: d.displayName || d.email?.split("@")[0] || "Merchant",
+                storeName: d.storeName || "My Store",
+                role: d.role || "merchant",
+                isVerified: !!d.isVerified,
+                verificationStatus: d.verificationStatus || "none",
+                accountStatus: d.accountStatus || "active",
+                avatarUrl: d.photoURL || d.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=140&auto=format&fit=crop&q=80",
+                activeBusinessId: d.activeBusinessId,
+                createdAt: d.createdAt || new Date().toISOString(),
+                updatedAt: d.updatedAt,
+              });
+            }
           }
         });
         onUsersUpdated(users);

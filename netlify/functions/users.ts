@@ -29,6 +29,17 @@ const DEFAULT_USERS: NetlifyAccount[] = [
   },
 ];
 
+const DEMO_BLOCKED_EMAILS = [
+  "merchant@kiosk.com",
+  "david@kiosk.com",
+  "merchant@inco.app",
+  "cashier1@inco.app",
+  "demo@inco.app",
+  "test@inco.app",
+  "demo-merchant@inco.app",
+  "john@example.com",
+];
+
 // In-memory persistent cache for serverless invocation
 let serverlessUsers: NetlifyAccount[] = [...DEFAULT_USERS];
 
@@ -151,7 +162,14 @@ export const handler = async (event: any) => {
         map.set("settaholdings@gmail.com", DEFAULT_USERS[0]);
       }
 
-      serverlessUsers = Array.from(map.values());
+      serverlessUsers = Array.from(map.values()).filter(
+        (u) =>
+          u.emailOrPhone?.toLowerCase() === "settaholdings@gmail.com" ||
+          (!DEMO_BLOCKED_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) &&
+            !(u.id || "").toLowerCase().startsWith("demo-") &&
+            !(u.id || "").toLowerCase().startsWith("user-demo-") &&
+            !(u.emailOrPhone || "").toLowerCase().includes("kiosk.com"))
+      );
 
       return {
         statusCode: 200,

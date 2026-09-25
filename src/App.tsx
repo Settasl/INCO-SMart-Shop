@@ -126,7 +126,7 @@ export function App() {
   // Sync Firebase Auth user with active session state
   useEffect(() => {
     if (fbUser) {
-      const email = fbUser.email || "merchant@inco.app";
+      const email = fbUser.email || (fbUser.isAnonymous ? "guest@store.local" : "merchant@store.local");
       const isSuperAdmin = email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
       const account: RegisteredAccount = {
         id: fbUser.uid,
@@ -175,23 +175,11 @@ export function App() {
 
   const userPhoneOrEmail = currentAccount?.emailOrPhone || null;
 
-  // Inventory & Store State
-  const [items, setItems] = useState<InventoryItem[]>(() => {
-    return safeStorage.getJSON<InventoryItem[]>("inco_inventory_items", INITIAL_INVENTORY);
-  });
-
-  const [movements, setMovements] = useState<StockMovement[]>(() => {
-    return safeStorage.getJSON<StockMovement[]>("inco_stock_movements", []);
-  });
-
-  const [credits, setCredits] = useState<CreditRecord[]>(() => {
-    return safeStorage.getJSON<CreditRecord[]>("inco_credit_records", INITIAL_CREDIT_RECORDS);
-  });
-
-  const [cashAtHand, setCashAtHand] = useState<number>(() => {
-    const saved = safeStorage.getItem("inco_cash_at_hand");
-    return saved ? parseFloat(saved) : 0.0;
-  });
+  // Inventory & Store State - Strictly clean tenant isolation (no fake demo figures)
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [credits, setCredits] = useState<CreditRecord[]>([]);
+  const [cashAtHand, setCashAtHand] = useState<number>(0.0);
 
   const [settings, setSettings] = useState<StoreSettings>(() => {
     return safeStorage.getJSON<StoreSettings>("inco_store_settings", DEFAULT_SETTINGS);
@@ -200,6 +188,84 @@ export function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return safeStorage.getJSON<boolean>("inco_dark_mode", false);
   });
+
+  // One-time startup purge of legacy demo accounts, demo items, and demo movements from browser cache
+  useEffect(() => {
+    try {
+      const demoBlocked = ["merchant@kiosk.com", "david@kiosk.com", "merchant@inco.app", "demo@inco.app", "john@example.com"];
+      const rawUsers = safeStorage.getItem("inco_registered_users_v3");
+      if (rawUsers) {
+        const parsed = JSON.parse(rawUsers);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(
+            (u) =>
+              u.emailOrPhone?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ||
+              (!demoBlocked.includes((u.emailOrPhone || "").toLowerCase()) &&
+                !(u.id || "").toLowerCase().startsWith("demo-") &&
+                !(u.id || "").toLowerCase().startsWith("user-demo-") &&
+                !(u.emailOrPhone || "").toLowerCase().includes("kiosk.com"))
+          );
+          if (cleaned.length !== parsed.length) {
+            safeStorage.setJSON("inco_registered_users_v3", cleaned);
+            setRegisteredAccounts(cleaned);
+          }
+        }
+      }
+
+      const rootItems = safeStorage.getJSON<any[]>("inco_inventory_items", []);
+      if (Array.isArray(rootItems) && rootItems.some((i) => i && i.id && (i.id.startsWith("item-med-") || i.id.startsWith("pos-") || i.id.startsWith("item-shoe-")))) {
+        safeStorage.setJSON("inco_inventory_items", []);
+      }
+      const rootMovements = safeStorage.getJSON<any[]>("inco_stock_movements", []);
+      if (Array.isArray(rootMovements) && rootMovements.some((m) => m && m.id && (m.id.startsWith("mov-demo-") || m.id.startsWith("demo-")))) {
+        safeStorage.setJSON("inco_stock_movements", []);
+      }
+    } catch (e) {}
+  }, []);
+
+  // Load tenant-scoped inventory, movements and cash when currentAccount changes
+  useEffect(() => {
+    if (!currentAccount) {
+      setItems([]);
+      setMovements([]);
+      setCredits([]);
+      setCashAtHand(0);
+      return;
+    }
+
+    const tKey = currentAccount.id ? currentAccount.id.replace(/[^a-zA-Z0-9_-]/g, "_") : "guest";
+    // Check if user already has saved inventory
+    const savedItems = safeStorage.getJSON<InventoryItem[] | null>(`inco_items_${tKey}`, null);
+    if (savedItems !== null && Array.isArray(savedItems)) {
+      const cleaned = savedItems.filter(
+        (i) => i && i.id && !i.id.startsWith("pos-") && !i.id.startsWith("item-med-") && !i.id.startsWith("item-shoe-") && !i.id.startsWith("item-cloth-")
+      );
+      setItems(cleaned);
+    } else {
+      // Clean brand new user: strictly 0 items!
+      setItems([]);
+      safeStorage.setJSON(`inco_items_${tKey}`, []);
+    }
+
+    const savedMovements = safeStorage.getJSON<StockMovement[] | null>(`inco_movements_${tKey}`, null);
+    if (savedMovements !== null && Array.isArray(savedMovements)) {
+      setMovements(savedMovements.filter((m) => m && m.id && !m.id.startsWith("mov-demo-") && !m.id.startsWith("demo-")));
+    } else {
+      setMovements([]);
+      safeStorage.setJSON(`inco_movements_${tKey}`, []);
+    }
+
+    const savedCredits = safeStorage.getJSON<CreditRecord[] | null>(`inco_credits_${tKey}`, null);
+    if (savedCredits !== null && Array.isArray(savedCredits)) {
+      setCredits(savedCredits.filter((c) => c && c.id && !c.id.startsWith("cred-")));
+    } else {
+      setCredits([]);
+      safeStorage.setJSON(`inco_credits_${tKey}`, []);
+    }
+
+    const savedCash = safeStorage.getItem(`inco_cash_${tKey}`);
+    setCashAtHand(savedCash ? parseFloat(savedCash) : 0.0);
+  }, [currentAccount?.id]);
 
   // Filter & Search state
   const [activeFilter, setActiveFilter] = useState<"all" | "low_stock" | "out_of_stock">("all");
@@ -261,25 +327,41 @@ export function App() {
 
   // Sync to local cache and fallback Firestore
   useEffect(() => {
+    if (currentAccount?.id) {
+      const tKey = currentAccount.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+      safeStorage.setJSON(`inco_items_${tKey}`, items);
+    }
     safeStorage.setJSON("inco_inventory_items", items);
     if (activeBusinessId) {
       syncItemsToBusinessFirestore(activeBusinessId, items).catch(() => {});
     } else if (userPhoneOrEmail) {
       syncItemsToFirestore(userPhoneOrEmail, items);
     }
-  }, [items, activeBusinessId, userPhoneOrEmail]);
+  }, [items, activeBusinessId, userPhoneOrEmail, currentAccount?.id]);
 
   useEffect(() => {
+    if (currentAccount?.id) {
+      const tKey = currentAccount.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+      safeStorage.setJSON(`inco_movements_${tKey}`, movements);
+    }
     safeStorage.setJSON("inco_stock_movements", movements);
-  }, [movements]);
+  }, [movements, currentAccount?.id]);
 
   useEffect(() => {
+    if (currentAccount?.id) {
+      const tKey = currentAccount.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+      safeStorage.setJSON(`inco_credits_${tKey}`, credits);
+    }
     safeStorage.setJSON("inco_credit_records", credits);
-  }, [credits]);
+  }, [credits, currentAccount?.id]);
 
   useEffect(() => {
+    if (currentAccount?.id) {
+      const tKey = currentAccount.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+      safeStorage.setItem(`inco_cash_${tKey}`, cashAtHand.toString());
+    }
     safeStorage.setItem("inco_cash_at_hand", cashAtHand.toString());
-  }, [cashAtHand]);
+  }, [cashAtHand, currentAccount?.id]);
 
   useEffect(() => {
     safeStorage.setJSON("inco_store_settings", settings);

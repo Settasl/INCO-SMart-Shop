@@ -112,6 +112,17 @@ const DEFAULT_SERVER_USERS: BackendAccount[] = [
   },
 ];
 
+const DEMO_BLOCKED_EMAILS = [
+  "merchant@kiosk.com",
+  "david@kiosk.com",
+  "merchant@inco.app",
+  "cashier1@inco.app",
+  "demo@inco.app",
+  "test@inco.app",
+  "demo-merchant@inco.app",
+  "john@example.com",
+];
+
 function initDatabase() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -121,9 +132,20 @@ function initDatabase() {
       const raw = fs.readFileSync(DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (parsed) {
-        let loadedUsers = Array.isArray(parsed.users) ? parsed.users : [];
-        if (loadedUsers.length === 0) {
-          loadedUsers = [...DEFAULT_SERVER_USERS];
+        let loadedUsers: BackendAccount[] = Array.isArray(parsed.users) ? parsed.users : [];
+        // Strictly purge all demo / fake users, preserving only super admin and actual registrations
+        loadedUsers = loadedUsers.filter(
+          (u) =>
+            u.emailOrPhone?.toLowerCase() === "settaholdings@gmail.com" ||
+            (!DEMO_BLOCKED_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) &&
+              !(u.id || "").startsWith("demo-") &&
+              !(u.id || "").startsWith("user-demo-"))
+        );
+        const hasAdmin = loadedUsers.some(
+          (u) => u.emailOrPhone?.toLowerCase() === "settaholdings@gmail.com"
+        );
+        if (!hasAdmin) {
+          loadedUsers.unshift(DEFAULT_SERVER_USERS[0]);
         }
         dbState = {
           users: loadedUsers,
@@ -131,6 +153,7 @@ function initDatabase() {
           announcements: Array.isArray(parsed.announcements) ? parsed.announcements : INITIAL_ANNOUNCEMENTS,
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
         };
+        saveDatabase();
         return;
       }
     }
@@ -272,6 +295,17 @@ app.post("/api/announcements", (req, res) => {
 
 // Full state sync snapshot
 app.get("/api/sync", (req, res) => {
+  dbState.users = dbState.users.filter(
+    (u) =>
+      u.emailOrPhone?.toLowerCase() === "settaholdings@gmail.com" ||
+      (!DEMO_BLOCKED_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) &&
+        !(u.id || "").toLowerCase().startsWith("demo-") &&
+        !(u.id || "").toLowerCase().startsWith("user-demo-") &&
+        !(u.emailOrPhone || "").toLowerCase().includes("kiosk.com"))
+  );
+  dbState.telemetry = dbState.telemetry.filter(
+    (t) => !(t.userIdentifier || "").includes("kiosk.com") && !(t.storeName || "").includes("David")
+  );
   res.json({
     success: true,
     users: dbState.users,
@@ -285,6 +319,14 @@ app.get("/api/sync", (req, res) => {
 
 // Get all users
 app.get("/api/users", (req, res) => {
+  dbState.users = dbState.users.filter(
+    (u) =>
+      u.emailOrPhone?.toLowerCase() === "settaholdings@gmail.com" ||
+      (!DEMO_BLOCKED_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) &&
+        !(u.id || "").toLowerCase().startsWith("demo-") &&
+        !(u.id || "").toLowerCase().startsWith("user-demo-") &&
+        !(u.emailOrPhone || "").toLowerCase().includes("kiosk.com"))
+  );
   res.json({
     success: true,
     users: dbState.users,
@@ -421,7 +463,14 @@ app.post("/api/users/sync", (req, res) => {
       map.set("settaholdings@gmail.com", DEFAULT_SERVER_USERS[0]);
     }
 
-    dbState.users = Array.from(map.values());
+    dbState.users = Array.from(map.values()).filter(
+      (u) =>
+        u.emailOrPhone?.toLowerCase() === "settaholdings@gmail.com" ||
+        (!DEMO_BLOCKED_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) &&
+          !(u.id || "").toLowerCase().startsWith("demo-") &&
+          !(u.id || "").toLowerCase().startsWith("user-demo-") &&
+          !(u.emailOrPhone || "").toLowerCase().includes("kiosk.com"))
+    );
     saveDatabase();
 
     res.json({

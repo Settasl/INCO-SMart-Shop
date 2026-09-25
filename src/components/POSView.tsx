@@ -27,6 +27,7 @@ interface POSViewProps {
   ) => void;
   onOpenScanner?: () => void;
   onShowToast: (msg: string, type?: "success" | "warning" | "info") => void;
+  onNavigateTo?: (view: any) => void;
 }
 
 export const POSView: React.FC<POSViewProps> = ({
@@ -35,116 +36,15 @@ export const POSView: React.FC<POSViewProps> = ({
   onCompleteSale,
   onOpenScanner,
   onShowToast,
+  onNavigateTo,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  // Core products showcase from the design board
-  const showcaseDefaults: InventoryItem[] = useMemo(
-    () => [
-      {
-        id: "pos-speaker-1",
-        name: "Bluetooth Speaker",
-        category: "Electronics",
-        quantity: 25,
-        unit: "pcs",
-        reorderPoint: 5,
-        costPrice: 140.0,
-        sellingPrice: 240.0,
-        barcode: "890123400901",
-        sku: "SPK-BT-240",
-        lastCountedAt: new Date().toISOString(),
-        location: "Aisle E1",
-        notes: "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=300&auto=format&fit=crop&q=80",
-      },
-      {
-        id: "pos-watch-2",
-        name: "Smart Watch",
-        category: "Electronics",
-        quantity: 18,
-        unit: "pcs",
-        reorderPoint: 4,
-        costPrice: 100.0,
-        sellingPrice: 180.0,
-        barcode: "890123400902",
-        sku: "WTC-SM-180",
-        lastCountedAt: new Date().toISOString(),
-        location: "Aisle E2",
-        notes: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=300&auto=format&fit=crop&q=80",
-      },
-      {
-        id: "pos-earbuds-3",
-        name: "Wireless Earbuds",
-        category: "Electronics",
-        quantity: 30,
-        unit: "pcs",
-        reorderPoint: 6,
-        costPrice: 65.0,
-        sellingPrice: 120.0,
-        barcode: "890123400903",
-        sku: "EBD-WL-120",
-        lastCountedAt: new Date().toISOString(),
-        location: "Aisle E3",
-        notes: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=300&auto=format&fit=crop&q=80",
-      },
-      {
-        id: "pos-headphones-4",
-        name: "Noise-Cancelling Headphones",
-        category: "Electronics",
-        quantity: 12,
-        unit: "pcs",
-        reorderPoint: 3,
-        costPrice: 180.0,
-        sellingPrice: 320.0,
-        barcode: "890123400904",
-        sku: "HDP-NC-320",
-        lastCountedAt: new Date().toISOString(),
-        location: "Aisle E4",
-        notes: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&auto=format&fit=crop&q=80",
-      },
-      {
-        id: "pos-cable-5",
-        name: "USB-C Fast Charging Cable",
-        category: "Accessories",
-        quantity: 45,
-        unit: "pcs",
-        reorderPoint: 10,
-        costPrice: 5.0,
-        sellingPrice: 15.0,
-        barcode: "890123400905",
-        sku: "CBL-USBC-15",
-        lastCountedAt: new Date().toISOString(),
-        location: "Aisle A1",
-        notes: "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=300&auto=format&fit=crop&q=80",
-      },
-      {
-        id: "pos-powerbank-6",
-        name: "20,000mAh Power Bank",
-        category: "Accessories",
-        quantity: 14,
-        unit: "pcs",
-        reorderPoint: 4,
-        costPrice: 28.0,
-        sellingPrice: 65.0,
-        barcode: "890123400906",
-        sku: "PWR-20K-65",
-        lastCountedAt: new Date().toISOString(),
-        location: "Aisle A2",
-        notes: "https://images.unsplash.com/photo-1609592426868-8097d8c54b65?w=300&auto=format&fit=crop&q=80",
-      },
-    ],
-    []
-  );
+  // Pure tenant store products strictly from real merchant inventory (no fake demo data)
+  const allProducts = useMemo(() => items || [], [items]);
 
-  // Combine store inventory with showcase defaults if store has few items
-  const allProducts = useMemo(() => {
-    if (items && items.length >= 4) {
-      return items;
-    }
-    return [...items, ...showcaseDefaults];
-  }, [items, showcaseDefaults]);
-
-  // Categories list
+  // Categories list derived strictly from real products
   const categories = useMemo(() => {
     const set = new Set<string>();
     set.add("All");
@@ -159,8 +59,8 @@ export const POSView: React.FC<POSViewProps> = ({
     return allProducts.filter((item) => {
       const matchesSearch =
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.barcode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+        (item.sku && item.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (item.barcode && item.barcode.includes(searchQuery));
       const matchesCategory =
         selectedCategory === "All" || item.category === selectedCategory;
       return matchesSearch && matchesCategory;
@@ -218,7 +118,7 @@ export const POSView: React.FC<POSViewProps> = ({
     }
     sounds.playCashRegister();
     onCompleteSale(cart, total, "Cash POS");
-    onShowToast(`Checkout complete: $${total.toFixed(2)}`, "success");
+    onShowToast(`Checkout complete: ${settings.currencySymbol || "$"}${total.toFixed(2)}`, "success");
     setCart([]);
   };
 
@@ -281,49 +181,99 @@ export const POSView: React.FC<POSViewProps> = ({
           })}
         </div>
 
-        {/* Product Cards Grid (3 columns on desktop, 2 on mobile) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 sm:gap-4">
-          {filteredItems.map((product) => (
-            <div
-              key={product.id}
-              onClick={() => addToCart(product)}
-              className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E1E1E] border border-slate-200 dark:border-white/10 hover:border-[#E5F107] shadow-xs flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] group"
-            >
-              <div className="w-full aspect-square rounded-xl bg-slate-100 dark:bg-black/20 overflow-hidden mb-3 relative flex items-center justify-center">
-                <img
-                  src={getProductImage(product)}
-                  alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-white/90 dark:bg-[#252525]/90 backdrop-blur-sm text-[10px] font-bold text-[#252525] dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-xs">
-                  {product.quantity} in stock
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-xs sm:text-sm font-bold text-[#252525] dark:text-white truncate">
-                  {product.name}
-                </h4>
-                <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-xs sm:text-sm font-black text-[#252525] dark:text-white">
-                    ${product.sellingPrice.toFixed(2)}
-                  </span>
+        {/* Product Cards Grid or Empty Store State */}
+        {filteredItems.length === 0 ? (
+          <div className="p-8 sm:p-12 rounded-2xl bg-white dark:bg-[#1E1E1E] border border-slate-200 dark:border-white/10 text-center flex flex-col items-center justify-center min-h-[360px]">
+            <div className="w-16 h-16 rounded-2xl bg-amber-400/10 dark:bg-[#E5F107]/10 flex items-center justify-center text-amber-500 dark:text-[#E5F107] mb-4">
+              <ShoppingBag className="w-8 h-8" />
+            </div>
+            {allProducts.length === 0 ? (
+              <>
+                <h3 className="text-base sm:text-lg font-black text-[#252525] dark:text-white mb-1.5">
+                  Store Catalog is Empty
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mb-5 leading-relaxed">
+                  You haven't recorded any products in your store yet. Add your products in the Products tab or scan barcodes to begin ringing up sales at your POS.
+                </p>
+                {onNavigateTo && (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addToCart(product);
+                    onClick={() => {
+                      sounds.playClick();
+                      onNavigateTo("products");
                     }}
-                    className="w-6 h-6 rounded-lg bg-[#E5F107] text-[#252525] flex items-center justify-center font-bold hover:bg-[#d2dc00] shadow-xs cursor-pointer"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E5F107] hover:bg-[#d2dc00] text-[#252525] font-black text-xs shadow-md transition-colors cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>Add Products Now</span>
                   </button>
+                )}
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-bold text-[#252525] dark:text-white mb-1">
+                  No matching products
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                  No products found matching "{searchQuery}". Try a different search term or category.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedCategory("All");
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-xs font-bold text-slate-700 dark:text-slate-200"
+                >
+                  Clear Filters
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 sm:gap-4">
+            {filteredItems.map((product) => (
+              <div
+                key={product.id}
+                onClick={() => addToCart(product)}
+                className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E1E1E] border border-slate-200 dark:border-white/10 hover:border-[#E5F107] shadow-xs flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] group"
+              >
+                <div className="w-full aspect-square rounded-xl bg-slate-100 dark:bg-black/20 overflow-hidden mb-3 relative flex items-center justify-center">
+                  <img
+                    src={getProductImage(product)}
+                    alt={product.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-white/90 dark:bg-[#252525]/90 backdrop-blur-sm text-[10px] font-bold text-[#252525] dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-xs">
+                    {product.quantity} in stock
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-[#252525] dark:text-white truncate">
+                    {product.name}
+                  </h4>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-xs sm:text-sm font-black text-[#252525] dark:text-white">
+                      {settings.currencySymbol || "$"}{product.sellingPrice.toFixed(2)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addToCart(product);
+                      }}
+                      className="w-6 h-6 rounded-lg bg-[#E5F107] text-[#252525] flex items-center justify-center font-bold hover:bg-[#d2dc00] shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -404,15 +354,15 @@ export const POSView: React.FC<POSViewProps> = ({
           <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold">
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span className="text-[#252525] dark:text-white font-bold">${subtotal.toFixed(2)}</span>
+              <span className="text-[#252525] dark:text-white font-bold">{settings.currencySymbol || "$"}{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Tax (5%)</span>
-              <span className="text-[#252525] dark:text-white font-bold">${tax.toFixed(2)}</span>
+              <span className="text-[#252525] dark:text-white font-bold">{settings.currencySymbol || "$"}{tax.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm font-black text-[#252525] dark:text-white pt-2 border-t border-slate-100 dark:border-white/10">
               <span>Total</span>
-              <span className="text-base text-[#252525] dark:text-[#E5F107] font-black">${total.toFixed(2)}</span>
+              <span className="text-base text-[#252525] dark:text-[#E5F107] font-black">{settings.currencySymbol || "$"}{total.toFixed(2)}</span>
             </div>
           </div>
 

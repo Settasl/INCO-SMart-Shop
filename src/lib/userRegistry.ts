@@ -1,5 +1,5 @@
 import { UserProfile, PaymentRequest, VerificationRequest } from "../types";
-import { fetchAllUsersFromFirestore } from "./firebase";
+import { fetchAllUsersFromFirestore, updateUserInFirestore } from "./firebase";
 
 export interface RegisteredAccount {
   id: string;
@@ -97,6 +97,8 @@ export function broadcastUsersChange(): void {
 }
 
 const DEMO_EMAILS = [
+  "merchant@kiosk.com",
+  "david@kiosk.com",
   "merchant@inco.app",
   "cashier1@inco.app",
   "demo@inco.app",
@@ -115,7 +117,10 @@ export function loadRegisteredAccounts(): RegisteredAccount[] {
         const cleaned = parsed.filter(
           (u) =>
             u.emailOrPhone?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ||
-            (!DEMO_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) && !(u.id || "").startsWith("demo-"))
+            (!DEMO_EMAILS.includes((u.emailOrPhone || "").toLowerCase()) &&
+              !(u.id || "").toLowerCase().startsWith("demo-") &&
+              !(u.id || "").toLowerCase().startsWith("user-demo-") &&
+              !(u.emailOrPhone || "").toLowerCase().includes("kiosk.com"))
         );
         // Ensure super admin is always present
         const hasAdmin = cleaned.some(
@@ -123,6 +128,10 @@ export function loadRegisteredAccounts(): RegisteredAccount[] {
         );
         if (!hasAdmin) {
           cleaned.unshift(DEFAULT_ACCOUNTS[0]);
+        }
+        // If demo accounts were stripped, rewrite storage immediately
+        if (cleaned.length !== parsed.length) {
+          safeSetItem(STORAGE_USERS_KEY, JSON.stringify(cleaned));
         }
         return cleaned;
       }
@@ -559,7 +568,26 @@ export async function registerUserOnBackend(userData: {
   const cleanId = userData.emailOrPhone.trim().toLowerCase();
   const localAccounts = loadRegisteredAccounts();
 
-  // 1. Attempt registration / sync on backend server
+  // 1. Persist directly to Cloud Firestore so all admin consoles immediately see the new user
+  try {
+    const isDefaultAdmin = cleanId === SUPER_ADMIN_EMAIL.toLowerCase();
+    const docId = cleanId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    await updateUserInFirestore(docId, {
+      uid: docId,
+      email: cleanId,
+      displayName: userData.displayName || cleanId.split("@")[0],
+      storeName: userData.storeName || "My Store",
+      role: isDefaultAdmin ? "admin" : (userData.role || "merchant"),
+      accountStatus: "active",
+      isVerified: true,
+      verificationStatus: isDefaultAdmin ? "approved" : "none",
+      createdAt: new Date().toISOString(),
+    });
+  } catch (fsErr) {
+    console.warn("[Firestore] User write notice during signup:", fsErr);
+  }
+
+  // 2. Attempt registration / sync on backend server
   try {
     const res = await fetch("/api/users/signup", {
       method: "POST",

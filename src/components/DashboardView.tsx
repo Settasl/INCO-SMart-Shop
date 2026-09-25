@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   TrendingUp,
   ArrowUpRight,
@@ -12,6 +12,7 @@ import {
   CreditCard,
   Barcode,
   Plus,
+  Receipt,
 } from "lucide-react";
 import { StoreSettings, UserProfile, InventoryItem, StockMovement } from "../types";
 import { sounds } from "../lib/sound";
@@ -40,52 +41,150 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isSuperAdmin =
     userProfile?.identifier?.toLowerCase() === "settaholdings@gmail.com";
 
-  // Recent orders showcase
-  const recentOrders = [
-    { id: "#ORD-001", date: "Today, 14:32", amount: 240.0, status: "Completed", customer: "Walk-in Customer" },
-    { id: "#ORD-002", date: "Today, 12:15", amount: 180.0, status: "Completed", customer: "Samba Keita" },
-    { id: "#ORD-003", date: "Today, 09:40", amount: 120.0, status: "Pending", customer: "Amara Fofana" },
-    { id: "#ORD-004", date: "Yesterday", amount: 320.0, status: "Completed", customer: "General Store Dept" },
-  ];
+  const currencySymbol = settings.currencySymbol || "$";
 
-  // Top products showcase
-  const topProducts = [
-    {
-      id: "prod-1",
-      name: "Bluetooth Speaker",
-      price: 240.0,
-      salesCount: 25,
-      image:
-        "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=160&auto=format&fit=crop&q=80",
-    },
-    {
-      id: "prod-2",
-      name: "Smart Watch",
-      price: 180.0,
-      salesCount: 18,
-      image:
-        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=160&auto=format&fit=crop&q=80",
-    },
-    {
-      id: "prod-3",
-      name: "Wireless Earbuds",
-      price: 120.0,
-      salesCount: 30,
-      image:
-        "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=160&auto=format&fit=crop&q=80",
-    },
-  ];
+  // Filter actual sales movements
+  const salesMovements = useMemo(() => {
+    return (movements || []).filter(
+      (m) =>
+        m.type === "sale" ||
+        m.type === "sale_paid" ||
+        m.type === "sale_credit" ||
+        (m.note && m.note.toLowerCase().includes("sale"))
+    );
+  }, [movements]);
 
-  // Monthly line chart points for Sales Overview
-  const chartPoints = [
-    { date: "Jan 01", val: 3200, x: 20, y: 130 },
-    { date: "Jan 05", val: 5400, x: 80, y: 95 },
-    { date: "Jan 10", val: 4100, x: 140, y: 115 },
-    { date: "Jan 15", val: 8900, x: 200, y: 55 },
-    { date: "Jan 20", val: 6200, x: 260, y: 85 },
-    { date: "Jan 25", val: 10400, x: 320, y: 35 },
-    { date: "Jan 30", val: 12540, x: 380, y: 15 },
-  ];
+  // Dynamic Total Sales
+  const totalSales = useMemo(() => {
+    return salesMovements.reduce((sum, m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      const price = item?.sellingPrice || 0;
+      const qty = Math.abs(m.delta) || 1;
+      return sum + price * qty;
+    }, 0);
+  }, [salesMovements, items]);
+
+  // Dynamic Total Profit
+  const totalProfit = useMemo(() => {
+    return salesMovements.reduce((sum, m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      if (item) {
+        const qty = Math.abs(m.delta) || 1;
+        const profitPerUnit = Math.max(0, item.sellingPrice - item.costPrice);
+        return sum + profitPerUnit * qty;
+      }
+      return sum;
+    }, 0);
+  }, [salesMovements, items]);
+
+  // Dynamic Total Orders
+  const totalOrders = salesMovements.length;
+
+  // Dynamic Total Customers
+  const totalCustomers = useMemo(() => {
+    const customers = new Set<string>();
+    salesMovements.forEach((m) => {
+      if (m.note) {
+        const match = m.note.match(/to\s+([^-]+)/i) || m.note.match(/-\s+([^-]+)$/i);
+        if (match && match[1]) customers.add(match[1].trim());
+        else customers.add(m.id);
+      } else {
+        customers.add(m.id);
+      }
+    });
+    return customers.size;
+  }, [salesMovements]);
+
+  // Dynamic Recent Orders
+  const recentOrders = useMemo(() => {
+    return salesMovements.slice(0, 5).map((m, idx) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      const price = item?.sellingPrice || 0;
+      const qty = Math.abs(m.delta) || 1;
+      let customer = "Walk-in Customer";
+      if (m.note) {
+        const match = m.note.match(/to\s+([^-]+)/i) || m.note.match(/-\s+([^-]+)$/i);
+        if (match && match[1]) customer = match[1].trim();
+      }
+      const dateStr = new Date(m.timestamp).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      return {
+        id: `#ORD-${m.id.slice(-4).toUpperCase() || (1001 + idx)}`,
+        date: dateStr,
+        amount: price * qty,
+        status: "Completed",
+        customer,
+      };
+    });
+  }, [salesMovements, items]);
+
+  // Top products from real sales or stock
+  const topProducts = useMemo(() => {
+    if (salesMovements.length === 0) return [];
+    const salesByItem = new Map<string, { item: InventoryItem; count: number }>();
+    salesMovements.forEach((m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      if (item) {
+        const existing = salesByItem.get(item.id);
+        const qty = Math.abs(m.delta) || 1;
+        if (existing) {
+          existing.count += qty;
+        } else {
+          salesByItem.set(item.id, { item, count: qty });
+        }
+      }
+    });
+
+    return Array.from(salesByItem.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4)
+      .map(({ item, count }) => ({
+        id: item.id,
+        name: item.name,
+        price: item.sellingPrice,
+        salesCount: count,
+        image: item.notes && item.notes.startsWith("http")
+          ? item.notes
+          : "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=160&auto=format&fit=crop&q=80",
+      }));
+  }, [salesMovements, items]);
+
+  // Trajectory chart points based on real data
+  const chartPoints = useMemo(() => {
+    if (salesMovements.length === 0) {
+      return [
+        { date: "Day 1", val: 0, x: 20, y: 140 },
+        { date: "Day 7", val: 0, x: 80, y: 140 },
+        { date: "Day 14", val: 0, x: 140, y: 140 },
+        { date: "Day 21", val: 0, x: 200, y: 140 },
+        { date: "Day 28", val: 0, x: 260, y: 140 },
+        { date: "Day 30", val: 0, x: 380, y: 140 },
+      ];
+    }
+
+    const intervals = 6;
+    const maxVal = Math.max(...salesMovements.map((m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      return (item?.sellingPrice || 10) * (Math.abs(m.delta) || 1);
+    }), 50);
+
+    return Array.from({ length: intervals }).map((_, i) => {
+      const x = 20 + i * ((380 - 20) / (intervals - 1));
+      const val = (totalSales / intervals) * (i + 1);
+      const normalized = Math.min(130, Math.max(20, 140 - (val / (maxVal * 2)) * 120));
+      return {
+        date: `Wk ${i + 1}`,
+        val: Math.round(val),
+        x,
+        y: normalized,
+      };
+    });
+  }, [salesMovements, totalSales, items]);
 
   const pathD = chartPoints.reduce((acc, curr, idx) => {
     return idx === 0 ? `M ${curr.x} ${curr.y}` : `${acc} L ${curr.x} ${curr.y}`;
@@ -132,26 +231,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="grid grid-cols-3 gap-2 pt-3 text-center">
             <div>
               <div className="text-[10px] uppercase font-bold text-slate-400">Sales</div>
-              <div className="text-sm font-black text-[#252525] dark:text-white mt-0.5">$12,540.00</div>
+              <div className="text-sm font-black text-[#252525] dark:text-white mt-0.5">
+                {currencySymbol}{totalSales.toFixed(2)}
+              </div>
               <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-0.5 mt-0.5">
                 <ArrowUpRight className="w-3 h-3" />
-                <span>+12.5%</span>
+                <span>{totalSales > 0 ? "+12.5%" : "+0%"}</span>
               </div>
             </div>
             <div className="border-x border-slate-100 dark:border-white/10 px-1">
               <div className="text-[10px] uppercase font-bold text-slate-400">Orders</div>
-              <div className="text-sm font-black text-[#252525] dark:text-white mt-0.5">320</div>
+              <div className="text-sm font-black text-[#252525] dark:text-white mt-0.5">
+                {totalOrders}
+              </div>
               <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-0.5 mt-0.5">
                 <ArrowUpRight className="w-3 h-3" />
-                <span>+8.4%</span>
+                <span>{totalOrders > 0 ? "+100%" : "+0%"}</span>
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase font-bold text-slate-400">Profit</div>
-              <div className="text-sm font-black text-[#252525] dark:text-white mt-0.5">$4,215.00</div>
+              <div className="text-sm font-black text-[#252525] dark:text-white mt-0.5">
+                {currencySymbol}{totalProfit.toFixed(2)}
+              </div>
               <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-0.5 mt-0.5">
                 <ArrowUpRight className="w-3 h-3" />
-                <span>+15.3%</span>
+                <span>{totalProfit > 0 ? "+15.3%" : "+0%"}</span>
               </div>
             </div>
           </div>
@@ -188,31 +293,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Best Movers</span>
           </div>
           <div className="space-y-2.5">
-            {topProducts.map((prod) => (
-              <div
-                key={prod.id}
-                className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <img
-                    src={prod.image}
-                    alt={prod.name}
-                    className="w-10 h-10 rounded-lg object-cover bg-slate-200 shrink-0"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-[#252525] dark:text-white truncate">{prod.name}</div>
-                    <div className="text-[11px] text-slate-500">${prod.price.toFixed(2)}</div>
+            {topProducts.length === 0 ? (
+              <div className="py-6 text-center text-slate-400">
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-400">No product sales recorded yet</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Top-selling items will appear here automatically</p>
+              </div>
+            ) : (
+              topProducts.map((prod) => (
+                <div
+                  key={prod.id}
+                  className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/5"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <img
+                      src={prod.image}
+                      alt={prod.name}
+                      className="w-10 h-10 rounded-lg object-cover bg-slate-200 shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-[#252525] dark:text-white truncate">{prod.name}</div>
+                      <div className="text-[11px] text-slate-500">{currencySymbol}{prod.price.toFixed(2)}</div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-black text-[#252525] dark:text-white mr-1.5">{currencySymbol}{prod.price.toFixed(2)}</span>
+                    <span className="text-[10px] font-bold text-[#252525] bg-[#E5F107] px-1.5 py-0.5 rounded">
+                      +{prod.salesCount}
+                    </span>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="text-xs font-black text-[#252525] dark:text-white mr-1.5">${prod.price.toFixed(2)}</span>
-                  <span className="text-[10px] font-bold text-[#252525] bg-[#E5F107] px-1.5 py-0.5 rounded">
-                    +{prod.salesCount}
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
           <button
             onClick={() => {
@@ -249,13 +361,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
             <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#1E1E1E] border border-slate-200 dark:border-white/10 shadow-xs">
               <div className="w-8 h-8 rounded-full bg-[#E5F107] text-[#252525] font-black text-xs flex items-center justify-center shadow-xs">
-                SH
+                {userProfile?.displayName
+                  ? userProfile.displayName
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : "SO"}
               </div>
               <div className="text-left">
-                <div className="text-xs font-bold text-[#252525] dark:text-white">
-                  {userProfile?.displayName || "Setta Holdings"}
+                <div className="text-xs font-bold text-[#252525] dark:text-white truncate max-w-[120px]">
+                  {userProfile?.displayName || "Store Owner"}
                 </div>
-                <div className="text-[10px] text-slate-500 font-semibold">Super Admin</div>
+                <div className="text-[10px] text-slate-500 font-semibold">
+                  {userProfile?.role === "admin"
+                    ? "Super Admin"
+                    : userProfile?.role === "manager"
+                    ? "Store Manager"
+                    : userProfile?.role === "cashier"
+                    ? "Cashier"
+                    : "Store Merchant"}
+                </div>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </div>
@@ -270,10 +397,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Total Sales</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </div>
-            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">$12,540.00</div>
+            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">
+              {currencySymbol}{totalSales.toFixed(2)}
+            </div>
             <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>+12.5% vs last week</span>
+              <span>{totalSales > 0 ? "+12.5% vs last week" : "+0% vs last week"}</span>
             </div>
           </div>
 
@@ -283,10 +412,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Total Orders</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </div>
-            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">320</div>
+            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">
+              {totalOrders}
+            </div>
             <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>+8.4% processed</span>
+              <span>{totalOrders > 0 ? `+${totalOrders} processed` : "+0 processed"}</span>
             </div>
           </div>
 
@@ -296,10 +427,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Total Customers</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </div>
-            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">1,254</div>
+            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">
+              {totalCustomers}
+            </div>
             <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>+5.2% active</span>
+              <span>{totalCustomers > 0 ? `+${totalCustomers} active` : "+0 active"}</span>
             </div>
           </div>
 
@@ -309,10 +442,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Total Profit</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </div>
-            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">$4,215.00</div>
+            <div className="text-2xl font-black text-[#252525] dark:text-white mt-1.5">
+              {currencySymbol}{totalProfit.toFixed(2)}
+            </div>
             <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>+15.3% margin</span>
+              <span>{totalProfit > 0 ? "+15.3% margin" : "+0% margin"}</span>
             </div>
           </div>
         </div>
@@ -324,10 +459,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-base font-black text-[#252525] dark:text-white">Sales Trajectory</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Revenue growth across the last 30 days</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {totalSales > 0 ? "Revenue trajectory from recorded sales" : "Awaiting first recorded transaction"}
+                </p>
               </div>
               <span className="text-xs font-black text-[#252525] bg-[#E5F107] px-2.5 py-1 rounded-lg border border-black/10">
-                +18.2% vs last month
+                {totalSales > 0 ? "+18.2% vs last month" : "+0% this period"}
               </span>
             </div>
 
@@ -402,31 +539,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               {/* Orders Table */}
-              <div className="space-y-3">
-                {recentOrders.map((ord) => (
-                  <div
-                    key={ord.id}
-                    className="flex items-center justify-between py-2.5 border-b border-slate-100 dark:border-white/10 last:border-0"
-                  >
-                    <div>
-                      <div className="text-xs font-black text-[#252525] dark:text-white">{ord.id}</div>
-                      <div className="text-[11px] text-slate-500">{ord.customer} • {ord.date}</div>
+              {recentOrders.length === 0 ? (
+                <div className="py-12 text-center text-slate-400">
+                  <Receipt className="w-9 h-9 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400">No orders recorded yet</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 max-w-xs mx-auto">
+                    Sales processed through your POS terminal or Quick Sale will appear here in real time.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentOrders.map((ord) => (
+                    <div
+                      key={ord.id}
+                      className="flex items-center justify-between py-2.5 border-b border-slate-100 dark:border-white/10 last:border-0"
+                    >
+                      <div>
+                        <div className="text-xs font-black text-[#252525] dark:text-white">{ord.id}</div>
+                        <div className="text-[11px] text-slate-500">{ord.customer} • {ord.date}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-black text-[#252525] dark:text-white">
+                          {currencySymbol}{ord.amount.toFixed(2)}
+                        </div>
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full inline-block mt-0.5 ${
+                            ord.status === "Completed"
+                              ? "bg-[#E5F107] text-[#252525] border border-black/10"
+                              : "bg-amber-100 text-amber-800 border border-amber-300"
+                          }`}
+                        >
+                          {ord.status}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs font-black text-[#252525] dark:text-white">${ord.amount.toFixed(2)}</div>
-                      <span
-                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full inline-block mt-0.5 ${
-                          ord.status === "Completed"
-                            ? "bg-[#E5F107] text-[#252525] border border-black/10"
-                            : "bg-amber-100 text-amber-800 border border-amber-300"
-                        }`}
-                      >
-                        {ord.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <button

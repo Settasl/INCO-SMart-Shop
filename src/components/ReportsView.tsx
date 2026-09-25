@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   BarChart2,
   Calendar,
@@ -7,6 +7,8 @@ import {
   TrendingUp,
   Download,
   Printer,
+  Receipt,
+  ShoppingBag,
 } from "lucide-react";
 import { StoreSettings, StockMovement, InventoryItem } from "../types";
 import { sounds } from "../lib/sound";
@@ -22,23 +24,130 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   movements,
   items,
 }) => {
-  const [selectedPeriod, setSelectedPeriod] = useState("This Month");
+  const [selectedPeriod, setSelectedPeriod] = useState<"Today" | "This Week" | "This Month" | "This Year">("This Month");
+  const currencySymbol = settings.currencySymbol || "$";
 
-  // Bar chart columns matching bottom-center screen
-  const barData = [
-    { label: "Jan 1", heightPercent: 45, value: "$1,820" },
-    { label: "Jan 8", heightPercent: 78, value: "$3,140" },
-    { label: "Jan 15", heightPercent: 30, value: "$1,210" },
-    { label: "Jan 22", heightPercent: 92, value: "$3,690" },
-    { label: "Jan 29", heightPercent: 65, value: "$2,680" },
-  ];
+  // Filter sales movements by period
+  const periodFilteredSales = useMemo(() => {
+    const now = Date.now();
+    const periodMs = {
+      Today: 24 * 60 * 60 * 1000,
+      "This Week": 7 * 24 * 60 * 60 * 1000,
+      "This Month": 30 * 24 * 60 * 60 * 1000,
+      "This Year": 365 * 24 * 60 * 60 * 1000,
+    }[selectedPeriod];
 
-  // Top products ranking matching bottom-center screen
-  const topRankedProducts = [
-    { name: "Bluetooth Speaker", amount: "$2,410.00", units: 25 },
-    { name: "Smart Watch", amount: "$1,890.00", units: 18 },
-    { name: "Wireless Earbuds", amount: "$1,290.00", units: 30 },
-  ];
+    return (movements || []).filter((m) => {
+      const isSale =
+        m.type === "sale" ||
+        m.type === "sale_paid" ||
+        m.type === "sale_credit" ||
+        (m.note && m.note.toLowerCase().includes("sale"));
+      if (!isSale) return false;
+      const mTime = new Date(m.timestamp).getTime();
+      return now - mTime <= periodMs;
+    });
+  }, [movements, selectedPeriod]);
+
+  // Dynamic calculations
+  const totalSales = useMemo(() => {
+    return periodFilteredSales.reduce((sum, m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      const price = item?.sellingPrice || 0;
+      const qty = Math.abs(m.delta) || 1;
+      return sum + price * qty;
+    }, 0);
+  }, [periodFilteredSales, items]);
+
+  const totalOrders = periodFilteredSales.length;
+
+  const avgOrder = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+  const totalProfit = useMemo(() => {
+    return periodFilteredSales.reduce((sum, m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      if (item) {
+        const qty = Math.abs(m.delta) || 1;
+        const profitMargin = Math.max(0, item.sellingPrice - item.costPrice);
+        return sum + profitMargin * qty;
+      }
+      return sum;
+    }, 0);
+  }, [periodFilteredSales, items]);
+
+  const grossMarginPct = totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) : "0.0";
+
+  // Dynamic top ranked products
+  const topRankedProducts = useMemo(() => {
+    if (periodFilteredSales.length === 0) return [];
+    const map = new Map<string, { name: string; units: number; amount: number }>();
+    periodFilteredSales.forEach((m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      if (item) {
+        const qty = Math.abs(m.delta) || 1;
+        const amt = item.sellingPrice * qty;
+        const existing = map.get(item.id);
+        if (existing) {
+          existing.units += qty;
+          existing.amount += amt;
+        } else {
+          map.set(item.id, { name: item.name, units: qty, amount: amt });
+        }
+      }
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 4)
+      .map((p) => ({
+        name: p.name,
+        amount: `${currencySymbol}${p.amount.toFixed(2)}`,
+        units: p.units,
+      }));
+  }, [periodFilteredSales, items, currencySymbol]);
+
+  // Dynamic timeline bar chart data (5 time slices)
+  const barData = useMemo(() => {
+    if (periodFilteredSales.length === 0) {
+      return [
+        { label: "P1", heightPercent: 4, value: `${currencySymbol}0` },
+        { label: "P2", heightPercent: 4, value: `${currencySymbol}0` },
+        { label: "P3", heightPercent: 4, value: `${currencySymbol}0` },
+        { label: "P4", heightPercent: 4, value: `${currencySymbol}0` },
+        { label: "P5", heightPercent: 4, value: `${currencySymbol}0` },
+      ];
+    }
+
+    const slices = 5;
+    const now = Date.now();
+    const periodMs = {
+      Today: 24 * 60 * 60 * 1000,
+      "This Week": 7 * 24 * 60 * 60 * 1000,
+      "This Month": 30 * 24 * 60 * 60 * 1000,
+      "This Year": 365 * 24 * 60 * 60 * 1000,
+    }[selectedPeriod];
+
+    const sliceDuration = periodMs / slices;
+    const sliceTotals = Array(slices).fill(0);
+
+    periodFilteredSales.forEach((m) => {
+      const item = (items || []).find((i) => i.id === m.itemId);
+      const price = item?.sellingPrice || 0;
+      const qty = Math.abs(m.delta) || 1;
+      const amt = price * qty;
+      const mTime = new Date(m.timestamp).getTime();
+      const age = now - mTime;
+      const sliceIdx = Math.min(slices - 1, Math.max(0, Math.floor((periodMs - age) / sliceDuration)));
+      sliceTotals[sliceIdx] += amt;
+    });
+
+    const maxAmt = Math.max(...sliceTotals, 10);
+    return sliceTotals.map((tot, idx) => ({
+      label: `T${idx + 1}`,
+      heightPercent: Math.max(8, Math.round((tot / maxAmt) * 90)),
+      value: `${currencySymbol}${tot.toFixed(0)}`,
+    }));
+  }, [periodFilteredSales, selectedPeriod, items, currencySymbol]);
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
@@ -54,7 +163,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <Calendar className="w-3.5 h-3.5 text-amber-400" />
             <select
               value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
+              onChange={(e) => setSelectedPeriod(e.target.value as any)}
               className="bg-transparent text-white font-bold focus:outline-hidden cursor-pointer"
             >
               <option value="Today" className="bg-slate-900 text-white">Today</option>
@@ -73,10 +182,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Total Sales
           </span>
-          <div className="text-xl sm:text-2xl font-black text-white mt-1">$12,540.00</div>
+          <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            {currencySymbol}{totalSales.toFixed(2)}
+          </div>
           <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 mt-1">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+12.5%</span>
+            <span>{totalSales > 0 ? "+12.5%" : "+0%"}</span>
           </div>
         </div>
 
@@ -85,10 +196,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Total Orders
           </span>
-          <div className="text-xl sm:text-2xl font-black text-white mt-1">320</div>
+          <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            {totalOrders}
+          </div>
           <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 mt-1">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+8.4%</span>
+            <span>{totalOrders > 0 ? `+${totalOrders}` : "+0"}</span>
           </div>
         </div>
 
@@ -97,10 +210,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Average Order
           </span>
-          <div className="text-xl sm:text-2xl font-black text-white mt-1">$39.19</div>
+          <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            {currencySymbol}{avgOrder.toFixed(2)}
+          </div>
           <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 mt-1">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+5.2%</span>
+            <span>{avgOrder > 0 ? "+5.2%" : "+0%"}</span>
           </div>
         </div>
 
@@ -109,10 +224,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Total Profit
           </span>
-          <div className="text-xl sm:text-2xl font-black text-white mt-1">$4,215.00</div>
+          <div className="text-xl sm:text-2xl font-black text-white mt-1">
+            {currencySymbol}{totalProfit.toFixed(2)}
+          </div>
           <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 mt-1">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+15.3%</span>
+            <span>{totalProfit > 0 ? "+15.3%" : "+0%"}</span>
           </div>
         </div>
       </div>
@@ -127,7 +244,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               <p className="text-xs text-slate-400">Distribution over {selectedPeriod.toLowerCase()}</p>
             </div>
             <span className="text-xs font-bold text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-lg border border-amber-400/30">
-              Gold Peak Period
+              {totalSales > 0 ? "Active Sales Stream" : "No Activity"}
             </span>
           </div>
 
@@ -157,28 +274,38 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
 
             <div className="space-y-3">
-              {topRankedProducts.map((p, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl bg-[#0B0F19] border border-[#1A2333] flex items-center justify-between"
-                >
-                  <div>
-                    <div className="text-xs font-bold text-white">{p.name}</div>
-                    <div className="text-[10px] text-slate-400">{p.units} units sold</div>
-                  </div>
-                  <div className="text-sm font-black text-white">{p.amount}</div>
+              {topRankedProducts.length === 0 ? (
+                <div className="py-8 text-center text-slate-400">
+                  <p className="text-xs font-bold text-slate-300">No items sold yet</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Products sold in this timeframe will rank here</p>
                 </div>
-              ))}
+              ) : (
+                topRankedProducts.map((p, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-[#0B0F19] border border-[#1A2333] flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-white">{p.name}</div>
+                      <div className="text-[10px] text-slate-400">{p.units} units sold</div>
+                    </div>
+                    <div className="text-sm font-black text-white">{p.amount}</div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
           <div className="pt-4 border-t border-[#1A2333] mt-4">
             <div className="flex justify-between text-xs text-slate-400 font-bold mb-2">
               <span>Gross Margin</span>
-              <span className="text-emerald-400 font-black">33.6%</span>
+              <span className="text-emerald-400 font-black">{grossMarginPct}%</span>
             </div>
             <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-              <div className="h-full bg-emerald-400 rounded-full w-[67%]" />
+              <div
+                className="h-full bg-emerald-400 rounded-full transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, parseFloat(grossMarginPct)))}%` }}
+              />
             </div>
           </div>
         </div>
