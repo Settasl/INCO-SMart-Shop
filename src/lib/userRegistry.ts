@@ -577,11 +577,15 @@ export async function registerUserOnBackend(userData: {
     if (res.ok) {
       const data = await res.json();
       if (data.user) {
-        const updated = [data.user, ...localAccounts.filter((a) => a.emailOrPhone.toLowerCase() !== cleanId && a.id !== data.user.id)];
+        const fullUser: RegisteredAccount = {
+          ...data.user,
+          passwordHash: data.user.passwordHash || userData.password?.trim() || "[PROTECTED_BY_FIREBASE]",
+        };
+        const updated = [fullUser, ...localAccounts.filter((a) => a.emailOrPhone.toLowerCase() !== cleanId && a.id !== fullUser.id)];
         saveRegisteredAccounts(updated);
-        setActiveSessionUser(data.user);
+        setActiveSessionUser(fullUser);
         broadcastUsersChange();
-        return { success: true, user: data.user };
+        return { success: true, user: fullUser };
       }
     } else {
       const errData = await res.json().catch(() => ({}));

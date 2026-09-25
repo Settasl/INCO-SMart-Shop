@@ -44,6 +44,16 @@
   to = "/.netlify/functions/users"
   status = 200
 
+[[redirects]]
+  from = "/api/sync"
+  to = "/.netlify/functions/users"
+  status = 200
+
+[[redirects]]
+  from = "/api/telemetry"
+  to = "/.netlify/functions/health"
+  status = 200
+
 # SPA fallback
 [[redirects]]
   from = "/*"

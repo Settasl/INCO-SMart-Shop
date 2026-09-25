@@ -61,61 +61,66 @@ export const handler = async (event: any) => {
       };
     }
 
-    // 2. POST /api/users/signup
-    if (event.httpMethod === "POST" && path.includes("signup")) {
+    // 2. POST /api/users/signup or /api/users/sync
+    if (event.httpMethod === "POST") {
       const data = JSON.parse(event.body || "{}");
-      const cleanId = (data.emailOrPhone || "").trim().toLowerCase();
-      if (!cleanId) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: "Missing emailOrPhone" }) };
-      }
+      const isSignup =
+        path.includes("signup") ||
+        (event.rawUrl && event.rawUrl.includes("signup")) ||
+        data.action === "signup" ||
+        data.password !== undefined;
 
-      const existingIndex = serverlessUsers.findIndex(
-        (u) => u.emailOrPhone.toLowerCase() === cleanId
-      );
+      if (isSignup) {
+        const cleanId = (data.emailOrPhone || "").trim().toLowerCase();
+        if (!cleanId) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: "Missing emailOrPhone" }) };
+        }
 
-      if (existingIndex !== -1) {
-        const existing = serverlessUsers[existingIndex];
-        existing.displayName = data.displayName?.trim() || existing.displayName;
-        existing.storeName = data.storeName?.trim() || existing.storeName;
-        if (data.avatarUrl) existing.avatarUrl = data.avatarUrl;
+        const existingIndex = serverlessUsers.findIndex(
+          (u) => u.emailOrPhone.toLowerCase() === cleanId || u.id === cleanId
+        );
+
+        if (existingIndex !== -1) {
+          const existing = serverlessUsers[existingIndex];
+          existing.displayName = data.displayName?.trim() || existing.displayName;
+          existing.storeName = data.storeName?.trim() || existing.storeName;
+          if (data.avatarUrl) existing.avatarUrl = data.avatarUrl;
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, user: existing, message: "User synced with backend" }),
+          };
+        }
+
+        const isDefaultAdmin = cleanId === "settaholdings@gmail.com";
+        const newUser: NetlifyAccount = {
+          id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          emailOrPhone: cleanId,
+          displayName:
+            data.displayName?.trim() ||
+            (cleanId.includes("@") ? cleanId.split("@")[0] : `Merchant ${cleanId.slice(-4)}`),
+          storeName: data.storeName?.trim() || "My Store",
+          role: isDefaultAdmin ? "admin" : (data.role || "merchant"),
+          isVerified: true,
+          verificationStatus: "approved",
+          accountStatus: "active",
+          isPro: isDefaultAdmin,
+          avatarUrl:
+            data.avatarUrl ||
+            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
+          createdAt: new Date().toISOString(),
+        };
+
+        serverlessUsers = [newUser, ...serverlessUsers];
+
         return {
-          statusCode: 200,
+          statusCode: 201,
           headers,
-          body: JSON.stringify({ success: true, user: existing, message: "User synced" }),
+          body: JSON.stringify({ success: true, user: newUser, message: "Account created on backend" }),
         };
       }
 
-      const isDefaultAdmin = cleanId === "settaholdings@gmail.com";
-      const newUser: NetlifyAccount = {
-        id: `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        emailOrPhone: cleanId,
-        displayName:
-          data.displayName?.trim() ||
-          (cleanId.includes("@") ? cleanId.split("@")[0] : `Merchant ${cleanId.slice(-4)}`),
-        storeName: data.storeName?.trim() || "My Store",
-        role: isDefaultAdmin ? "admin" : (data.role || "merchant"),
-        isVerified: true,
-        verificationStatus: "approved",
-        accountStatus: "active",
-        isPro: isDefaultAdmin,
-        avatarUrl:
-          data.avatarUrl ||
-          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=140&auto=format&fit=crop&q=80",
-        createdAt: new Date().toISOString(),
-      };
-
-      serverlessUsers = [newUser, ...serverlessUsers];
-
-      return {
-        statusCode: 201,
-        headers,
-        body: JSON.stringify({ success: true, user: newUser }),
-      };
-    }
-
-    // 3. POST /api/users/sync
-    if (event.httpMethod === "POST") {
-      const data = JSON.parse(event.body || "{}");
+      // 3. POST /api/users/sync
       const clientUsers = Array.isArray(data.clientUsers) ? data.clientUsers : [];
 
       const map = new Map<string, NetlifyAccount>();
@@ -153,6 +158,39 @@ export const handler = async (event: any) => {
         headers,
         body: JSON.stringify({ success: true, users: serverlessUsers }),
       };
+    }
+
+    // 4. PUT /api/users/:id
+    if (event.httpMethod === "PUT") {
+      const parts = path.split("/").filter(Boolean);
+      const targetId = decodeURIComponent(parts[parts.length - 1] || "").toLowerCase();
+      const updates = JSON.parse(event.body || "{}");
+      const idx = serverlessUsers.findIndex(
+        (u) => u.id.toLowerCase() === targetId || u.emailOrPhone.toLowerCase() === targetId
+      );
+
+      if (idx !== -1) {
+        serverlessUsers[idx] = { ...serverlessUsers[idx], ...updates };
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ success: true, user: serverlessUsers[idx] }),
+        };
+      }
+      return { statusCode: 404, headers, body: JSON.stringify({ error: "User not found" }) };
+    }
+
+    // 5. DELETE /api/users/:id
+    if (event.httpMethod === "DELETE") {
+      const parts = path.split("/").filter(Boolean);
+      const targetId = decodeURIComponent(parts[parts.length - 1] || "").toLowerCase();
+      if (targetId === "settaholdings@gmail.com" || targetId === "user-super-admin-01") {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: "Cannot delete master administrator" }) };
+      }
+      serverlessUsers = serverlessUsers.filter(
+        (u) => u.id.toLowerCase() !== targetId && u.emailOrPhone.toLowerCase() !== targetId
+      );
+      return { statusCode: 200, headers, body: JSON.stringify({ success: true, users: serverlessUsers }) };
     }
 
     return { statusCode: 404, headers, body: JSON.stringify({ error: "Not found" }) };

@@ -379,6 +379,25 @@ export function App() {
     setAdminUsersList(loadRegisteredAccounts().map(convertAccountToUserProfile));
   }, []);
 
+  // Combined master user list for Admin Portal ensuring brand new registrations are immediately visible
+  const displayAllUsers = useMemo(() => {
+    const map = new Map<string, UserProfile>();
+    // 1. Seed with local registered accounts (ensures instant visibility upon signup)
+    registeredAccounts.map(convertAccountToUserProfile).forEach((u) => {
+      const key = (u.identifier || u.id || "").toLowerCase();
+      if (key) map.set(key, u);
+    });
+    // 2. Merge backend server & firestore users
+    adminUsersList.forEach((u) => {
+      const key = (u.identifier || u.id || "").toLowerCase();
+      if (key) {
+        const existing = map.get(key);
+        map.set(key, existing ? { ...existing, ...u } : u);
+      }
+    });
+    return Array.from(map.values());
+  }, [adminUsersList, registeredAccounts]);
+
   // Real-time Firestore users subscription for live cross-device Admin Portal updates
   useEffect(() => {
     const unsub = subscribeToAllUsersFromFirestore((liveUsers) => {
@@ -465,6 +484,8 @@ export function App() {
     setActiveSessionUser(account);
     const updatedAccounts = loadRegisteredAccounts();
     setRegisteredAccounts(updatedAccounts);
+    refreshAdminUsers();
+    syncUsersWithServer().catch(() => {});
     setIsAuthOpen(false);
     showToast(`Welcome back, ${account.displayName || account.emailOrPhone}!`, "success");
 
@@ -509,14 +530,17 @@ export function App() {
   };
 
   // Profile update handler
-  const handleUpdateProfile = (updates: Partial<UserProfile>) => {
+  const handleUpdateProfile = (
+    updates: Partial<UserProfile>,
+    newSettings?: Partial<StoreSettings>
+  ) => {
     if (!currentAccount) return;
     const newLogo =
       updates.businessLogo !== undefined
         ? updates.businessLogo
-        : updates.logoUrl !== undefined
-        ? updates.logoUrl
-        : currentAccount.businessLogo;
+      : updates.logoUrl !== undefined
+      ? updates.logoUrl
+      : currentAccount.businessLogo;
 
     const updatedAccount: RegisteredAccount = {
       ...currentAccount,
@@ -535,12 +559,21 @@ export function App() {
     setCurrentAccount(updatedAccount);
     setActiveSessionUser(updatedAccount);
 
-    setSettings((prev) => ({
-      ...prev,
-      storeName: updates.storeName || prev.storeName,
-      storeLogo: newLogo !== undefined ? newLogo : prev.storeLogo,
-      businessLogo: newLogo !== undefined ? newLogo : prev.businessLogo,
-    }));
+    setSettings((prev) => {
+      const merged = {
+        ...prev,
+        storeName: updates.storeName || prev.storeName,
+        storeLogo: newLogo !== undefined ? newLogo : prev.storeLogo,
+        businessLogo: newLogo !== undefined ? newLogo : prev.businessLogo,
+        ...(newSettings || {}),
+      };
+      safeStorage.setJSON("inco_store_settings", merged);
+      return merged;
+    });
+
+    if (newSettings?.darkMode !== undefined) {
+      setDarkMode(newSettings.darkMode);
+    }
 
     // Multi-cloud sync to Firestore and backend Express server
     updateUserInFirestore(currentAccount.id, {
@@ -1343,6 +1376,17 @@ export function App() {
             userProfile={userProfile}
             settings={settings}
             onUpdateProfile={handleUpdateProfile}
+            onSaveSettings={(newSettings) => {
+              setSettings(newSettings);
+              safeStorage.setJSON("inco_store_settings", newSettings);
+              if (newSettings.darkMode !== undefined) {
+                setDarkMode(newSettings.darkMode);
+              }
+              showToast("Store settings saved!", "success");
+            }}
+            onOpenSubscription={() => setIsSubscriptionOpen(true)}
+            onOpenVerification={() => setIsProfileOpen(true)}
+            onOpenAdminPortal={() => setIsAdminPortalOpen(true)}
             onShowToast={showToast}
             onLogout={handleLogout}
           />
@@ -1579,7 +1623,7 @@ export function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenChat={() => setIsChatOpen(true)}
-        onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenProfile={() => setActiveView("profile")}
         onOpenAdminPortal={() => setIsAdminPortalOpen(true)}
         onOpenSubscription={() => setIsSubscriptionOpen(true)}
         onOpenMenu={() => setIsMenuOpen(true)}
@@ -1718,7 +1762,7 @@ export function App() {
         currentUserProfile={userProfile}
         paymentRequests={paymentRequests}
         verificationRequests={verificationRequests}
-        allUsers={adminUsersList.length > 0 ? adminUsersList : registeredAccounts.map(convertAccountToUserProfile)}
+        allUsers={displayAllUsers}
         onRefreshUsers={refreshAdminUsers}
         onApprovePayment={handleApprovePayment}
         onRejectPayment={handleRejectPayment}
